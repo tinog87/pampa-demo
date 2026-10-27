@@ -1,26 +1,58 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Superficies y tinta — monocromo Relu */
+  --color-paper: #ffffff;
+  --color-panel: #fafafa;
+  --color-card: #f4f4f5;
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #3f3f46;
+  --color-muted: #71717a;
+  --color-faint: #a1a1aa;
+  --color-line: #e4e4e7;
+  --color-line-strong: #d4d4d8;
+
+  /* Semántica — el color SOLO significa estado */
+  --color-ok: #16a34a;
+  --color-ok-bg: #f0fdf4;
+  --color-ok-ink: #15803d;
+  --color-warn: #d97706;
+  --color-warn-bg: #fffbeb;
+  --color-warn-ink: #b45309;
+  --color-bad: #dc2626;
+  --color-bad-bg: #fef2f2;
+  --color-bad-ink: #b91c1c;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Barrita negra — motivo de marca, sobre el título de cada página */
+.brand-rule {
+  display: block;
+  width: 40px;
+  height: 4px;
+  background: var(--color-ink);
+  border-radius: 1px;
+}
+
+/* Números tabulares para tablas de plata */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--color-ink);
+  color: #fff;
 }
