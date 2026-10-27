@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   COMERCIOS,
   DECISIONES,
+  EFECTO_PILOTO,
   estadoDe,
   getComercio,
   presupuestoPorZona,
@@ -56,9 +57,17 @@ export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }
   const techoDe = (id: string, def: number) => techos[id] ?? def;
   const techoTotal = sum(zonas.map((z) => techoDe(z.zona.id, z.techo)));
   const pedidoGerente = sum(propuestas.map((p) => p.monto));
-  const pidenZonas = sum(zonas.map((z) => z.montoPropuesto)) + pedidoGerente;
-  const proponeSistema = sum(zonas.map((z) => z.montoPropuesto));
-  const dif = pidenZonas - techoTotal;
+  const pidenTotal = sum(zonas.map((z) => z.montoPropuesto)) + pedidoGerente;
+  const dif = pidenTotal - techoTotal;
+
+  // Qué cambia este ciclo, separando quién lo pidió: el sistema (reglas) o los gerentes.
+  // El neto es el efecto sobre el pedido: mover y cortar liberan (negativo), sumar agrega.
+  const decSistema = DECISIONES.filter((d) => d.origen === "sistema");
+  const decGerente = DECISIONES.filter((d) => d.origen === "gerente");
+  const netoSistema = sum(decSistema.map((d) => d.montoNeto));
+  const netoGerente = sum(decGerente.map((d) => d.montoNeto)) + pedidoGerente;
+  const nSistema = decSistema.length;
+  const nGerente = decGerente.length + propuestas.length;
 
   function exportar() {
     const rows = [["Zona", "Línea", "Actual", "Propuesto", "% justificado"]];
@@ -77,16 +86,17 @@ export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }
     URL.revokeObjectURL(url);
   }
 
-  // Por motivo
-  const porAccion = new Map<Accion, { count: number; monto: number }>();
+  // Por motivo: cuántos casos y el efecto NETO sobre el pedido (propuesto − actual).
+  // Mover y cortar liberan plata (negativo); sumar agrega; corregir/renovar no mueven monto.
+  const porAccion = new Map<Accion, { count: number; neto: number }>();
   for (const c of COMERCIOS)
     for (const i of c.inversiones) {
-      const cur = porAccion.get(i.accion) ?? { count: 0, monto: 0 };
+      const cur = porAccion.get(i.accion) ?? { count: 0, neto: 0 };
       cur.count++;
-      cur.monto += i.montoPropuesto;
+      cur.neto += i.montoPropuesto - i.montoActual;
       porAccion.set(i.accion, cur);
     }
-  const motivos: Accion[] = ["cortar", "mover", "sumar", "renovar", "condicionar"];
+  const motivos: Accion[] = ["cortar", "mover", "condicionar", "sumar", "corregir", "renovar"];
 
   return (
     <div>
@@ -94,11 +104,29 @@ export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }
         Presupuesto · próximo ciclo
       </PageTitle>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile value={usd(techoTotal)} label={readOnly ? "techo de Finanzas" : "techo (editable abajo)"} />
-        <StatTile value={usd(pidenZonas)} label="piden las zonas" tono="warn" />
-        <StatTile value={usd(proponeSistema)} label="propone el sistema" />
+        <StatTile value={usd(pidenTotal)} label="pedido del próximo ciclo" tono="warn" />
         <StatTile value={usd(dif)} label={dif > 0 ? "por encima del techo" : "margen bajo el techo"} tono={dif > 0 ? "bad" : "ok"} />
+        <StatTile value={usd(totales.porEstado.a_validar)} label="a validar" tono="warn" />
+      </div>
+
+      {/* Quién pidió los cambios: el sistema vs los gerentes (ya no son el mismo número). */}
+      <div className="mb-6 grid gap-3 sm:grid-cols-2">
+        <Card className="p-3.5">
+          <div className="text-xs text-muted">Lo marcó el sistema</div>
+          <div className="mt-0.5 text-sm font-medium text-ink">
+            {nSistema.toLocaleString("es-AR")} casos · <span className={netoSistema < 0 ? "text-ok-ink" : "text-ink"}>{usdSigno(netoSistema)}</span> sobre el pedido
+          </div>
+          <div className="mt-0.5 text-[11px] text-faint">Reglas activas: mover y cortar liberan, sumar agrega.</div>
+        </Card>
+        <Card className="p-3.5">
+          <div className="text-xs text-muted">Lo pidieron los gerentes</div>
+          <div className="mt-0.5 text-sm font-medium text-ink">
+            {nGerente.toLocaleString("es-AR")} casos · <span className={netoGerente < 0 ? "text-ok-ink" : "text-warn-ink"}>{usdSigno(netoGerente)}</span> sobre el pedido
+          </div>
+          <div className="mt-0.5 text-[11px] text-faint">Pedidos puntuales de los gerentes de zona, marcados aparte.</div>
+        </Card>
       </div>
 
       <Card className="mb-6 p-5">
@@ -110,17 +138,21 @@ export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }
       </Card>
 
       {/* Por motivo */}
-      <h2 className="mb-3 text-sm font-semibold text-ink">Por motivo</h2>
+      <h2 className="mb-1 text-sm font-semibold text-ink">Por motivo</h2>
+      <p className="mb-3 text-xs text-muted">Efecto sobre el pedido: mover y cortar liberan plata, sumar agrega, corregir y renovar no mueven el monto.</p>
       <Card className="mb-8 divide-y divide-line">
         {motivos.map((a) => {
           const d = porAccion.get(a);
           if (!d) return null;
+          const mueve = d.neto !== 0;
           return (
             <div key={a} className="flex items-center justify-between px-4 py-2.5 text-sm">
               <span className="font-medium text-ink">{ACCION_LABEL[a]}</span>
               <div className="flex items-center gap-6">
                 <span className="text-muted">{d.count.toLocaleString("es-AR")} casos</span>
-                <span className="w-28 text-right font-medium text-ink">{usd(d.monto)}</span>
+                <span className={cn("w-32 text-right font-medium", !mueve ? "text-faint" : d.neto < 0 ? "text-ok-ink" : "text-warn-ink")}>
+                  {mueve ? usdSigno(d.neto) : "sin cambio de monto"}
+                </span>
               </div>
             </div>
           );
@@ -319,6 +351,7 @@ export function DireccionResumen() {
           const propias = DECISIONES.filter((d) => getComercio(d.comercioId)?.zonaId === z.zona.id);
           const resueltas = propias.filter((d) => ["aprobada", "ejecutada", "medida", "rechazada"].includes(estadoDe(d, estados))).length;
           const avance = propias.length ? resueltas / propias.length : 1;
+          const efecto = EFECTO_PILOTO[z.zona.id];
           return (
             <Card key={z.zona.id} className="p-4">
               <div className="flex items-center justify-between">
@@ -329,8 +362,9 @@ export function DireccionResumen() {
                 <Row k="Avance de aprobaciones" v={pct(avance)} />
                 <Row k="Pide la zona" v={usd(z.montoPropuesto)} />
                 <Row k="Techo" v={usd(z.techo)} />
-                {z.zona.piloto ? <Row k="Efecto medido (vs sin intervención)" v="+6% compra" ok /> : null}
+                {efecto ? <Row k={`Efecto en la compra (${efecto.comercios} medidos)`} v={`${efecto.compra} vs parecidos`} ok /> : null}
               </div>
+              {efecto ? <p className="mt-2 border-t border-line pt-2 text-[11px] leading-snug text-faint">{efecto.nota}</p> : null}
             </Card>
           );
         })}

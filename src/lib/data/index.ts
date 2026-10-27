@@ -73,6 +73,8 @@ function reglaPara(inv: Inversion): { id: string; version: number } {
   if (inv.accion === "sumar") return { id: "heladera_sumar", version: 1 };
   if (inv.accion === "corregir" && inv.linea === "acuerdos")
     return { id: "acuerdo_cumplimiento", version: 1 };
+  if (inv.linea === "descuentos" && (inv.accion === "cortar" || inv.accion === "condicionar"))
+    return { id: "descuento_sin_efecto", version: 2 };
   return { id: "", version: 0 };
 }
 
@@ -90,15 +92,22 @@ function clasificar(c: Comercio, inv: Inversion): Clasif {
 
   const montoRef = Math.max(inv.montoActual, inv.montoPropuesto);
 
+  // Plata y equipo que decide el gerente: mover/sumar heladera (en competencia o monto alto).
   if (inv.accion === "mover" || inv.accion === "sumar") {
     const rol = c.competenciaActiva || montoRef >= 3000 ? "gerente" : "supervisor";
     return { apruebaRol: rol, estado: "esperando", auto: false };
   }
+  // Promoción condicionada: compromiso de plata, lo decide el gerente.
+  if (inv.accion === "condicionar") {
+    return { apruebaRol: "gerente", estado: "esperando", auto: false };
+  }
 
+  // Correcciones de ejecución (reclamar espacio, ajustar frío, cortar un descuento chico):
+  // trabajo del supervisor. Solo escalan al gerente si el monto es grande.
   if (montoRef < 300 && c.confianza === "alta" && inv.accion === "corregir") {
     return { apruebaRol: "auto", estado: "aprobada", auto: true };
   }
-  if (c.competenciaActiva || montoRef >= 3000) {
+  if (montoRef >= 3000) {
     return { apruebaRol: "gerente", estado: "esperando", auto: false };
   }
   return { apruebaRol: "supervisor", estado: "esperando", auto: false };
@@ -120,23 +129,44 @@ function generaDecision(c: Comercio, inv: Inversion): boolean {
   return ACCIONES_PROPUESTA.has(inv.accion);
 }
 
-function indicadorDe(c: Comercio, inv: Inversion): string {
-  const p = Math.round(c.compraVsParecidos * 100);
-  if (inv.accion === "sumar") return `compra ${p}% de sus parecidos… sin heladera`;
-  if (inv.linea === "acuerdos") return "foto: menos espacio que lo pactado";
-  if (inv.linea === "descuentos") return "promoción propuesta por el gerente";
-  return `compra ${p}% de sus parecidos`;
+// El ciclo no arranca en cero: una parte de las decisiones ya se resolvió en visitas
+// anteriores (aprobadas, ejecutadas, medidas en piloto, o que no prosperaron). El resto
+// sigue esperando. Es determinístico para que la demo se vea igual en cada carga.
+function estadoSemilla(
+  base: EstadoDecision,
+  k: number,
+  piloto: boolean,
+  accion: Inversion["accion"]
+): EstadoDecision {
+  const ejecutable = accion === "corregir" || accion === "mover" || accion === "sumar";
+  if (base === "esperando") {
+    const m = k % 10;
+    if (m <= 1) return "aprobada";
+    if (m === 2) return ejecutable ? "ejecutada" : "aprobada";
+    if (m === 3) return piloto && ejecutable ? "medida" : ejecutable ? "ejecutada" : "aprobada";
+    if (m === 4) return "rechazada";
+    return "esperando"; // ~60% sigue pendiente
+  }
+  if (base === "pide_foto" && k % 7 === 0) return "esperando"; // foto ya subida, ahora espera
+  if (base === "a_validar" && k % 6 === 0) return "aprobada"; // registro ya validado
+  return base;
 }
+
+// Los 6 comercios de ejemplo quedan en su estado de diseño (son el recorrido guiado).
+const HERO_IDS = new Set(["don-tito", "la-esquina", "el-sol", "sosa", "kiosco-mitre", "rivas"]);
 
 function buildDecisiones(): Decision[] {
   const out: Decision[] = [];
   let k = 0;
   for (const c of COMERCIOS) {
+    const piloto = !!getZona(c.zonaId)?.piloto;
+    const esHero = HERO_IDS.has(c.id);
     for (const inv of c.inversiones) {
       if (!generaDecision(c, inv)) continue;
       const cls = clasificar(c, inv);
       const regla = reglaPara(inv);
-      const vencida = cls.estado === "esperando" && k % 11 === 5;
+      const estadoInicial = esHero ? cls.estado : estadoSemilla(cls.estado, k, piloto, inv.accion);
+      const vencida = estadoInicial === "esperando" && k % 11 === 5;
       const fecha = new Date(2026, 9, 10 + ((k * 3) % 18));
       out.push({
         id: `${c.id}:${inv.linea}`,
@@ -153,7 +183,7 @@ function buildDecisiones(): Decision[] {
         apruebaRol: cls.apruebaRol,
         auto: cls.auto,
         origen: c.id === "rivas" || c.id === "kiosco-mitre" ? "gerente" : "sistema",
-        estadoInicial: cls.estado,
+        estadoInicial,
         fechaLimite: fecha.toISOString().slice(0, 10),
         vencida,
         tieneFoto: inv.linea === "frio" ? !!c.fotoFrio : inv.linea === "acuerdos" ? !!c.acuerdo : false,
@@ -196,17 +226,40 @@ export function estadoDe(
   return estados[d.id] ?? d.estadoInicial;
 }
 
-// Cuántos casos habría marcado la regla de descuentos (está en prueba: no propone).
-export function habriaMarcadoDescuento(): number {
-  return COMERCIOS.reduce(
-    (acc, c) =>
-      acc +
-      c.inversiones.filter(
-        (i) => i.linea === "descuentos" && i.estadoMonto === "sin_justificar"
-      ).length,
-    0
+// Descuentos que la regla activa marcó por no mover compra (cortar o condicionar).
+export function descuentosSinEfecto(): { casos: number; monto: number } {
+  const xs = COMERCIOS.flatMap((c) =>
+    c.inversiones.filter(
+      (i) => i.linea === "descuentos" && (i.accion === "cortar" || i.accion === "condicionar")
+    )
   );
+  return { casos: xs.length, monto: sum(xs.map((i) => i.montoActual)) };
 }
+
+// Mantengo el nombre anterior para la pantalla de reglas (cuántos casos marca la regla).
+export function habriaMarcadoDescuento(): number {
+  return descuentosSinEfecto().casos;
+}
+
+// Efecto medido en cada zona piloto (vs comercios parecidos sin intervención).
+// Diferenciado por zona: no es el mismo número en las tres.
+export const EFECTO_PILOTO: Record<string, { compra: string; comercios: number; nota: string }> = {
+  norte: {
+    compra: "+4,8%",
+    comercios: 142,
+    nota: "Con competencia activa el efecto es más chico, pero sostiene la compra frente al competidor.",
+  },
+  litoral: {
+    compra: "+7,2%",
+    comercios: 96,
+    nota: "Sin competencia fuerte: mover frío a los que más compran levantó la compra de la zona.",
+  },
+  cuyo: {
+    compra: "+5,5%",
+    comercios: 78,
+    nota: "Interior: el efecto se concentró en los acuerdos de exhibición reclamados.",
+  },
+};
 
 // ----------------------------------------------------------------------------
 // Presupuesto: rollup por zona, con estados de monto.
@@ -399,6 +452,20 @@ export function alertasDe(
         detalle: `${sinJust.length} inversiones sin motivo registrado. Es un hallazgo, no una tarea.`,
         href: "/presupuesto",
         cta: "Ver en presupuesto",
+      });
+  }
+
+  if (["finanzas", "direccion"].includes(rol)) {
+    const dsc = descuentosSinEfecto();
+    if (dsc.casos > 0)
+      alertas.push({
+        id: "descuentos-sin-efecto",
+        tono: "neutro",
+        categoria: "Descuentos",
+        titulo: `${fmtUsd(dsc.monto)} en descuentos sin efecto`,
+        detalle: `${dsc.casos} descuentos no movieron compra durante la vigencia. La regla propone cortarlos, o condicionarlos en zona con competencia. Cada caso se decide con su evidencia.`,
+        href: "/reglas",
+        cta: "Ver la regla",
       });
   }
 

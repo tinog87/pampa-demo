@@ -104,7 +104,7 @@ export const REGLAS: Regla[] = [
     id: "descuento_sin_efecto",
     nombre: "Descuento que no movió volumen",
     descripcion:
-      "Marca descuentos cuyo comercio no compró más que sus parecidos durante la vigencia.",
+      "Compara la compra del comercio durante la vigencia del descuento contra sus parecidos. Si el descuento no movió la compra, propone cortarlo; en zona con competencia, condicionarlo.",
     versions: [
       {
         version: 1,
@@ -115,10 +115,25 @@ export const REGLAS: Regla[] = [
         necesita: "comparar la ventana con y sin descuento",
         seConfirma: "el gerente revisa la recomendación",
         excepcion: "descuento dado para frenar competencia → se registra el motivo",
-        propone: "condicionar",
+        propone: "cortar",
         params: { umbral_compra: 1.0 },
-        cambio: "Primera versión. Corre en prueba contra el año anterior antes de activarse.",
-        estado: "en_prueba",
+        cambio: "Primera versión. Corrió en prueba contra el año anterior antes de activarse.",
+        estado: "archivada",
+      },
+      {
+        version: 2,
+        fecha: "2026-10-20",
+        define: "Finanzas",
+        condicion:
+          "compra contra parecidos menor a 1,0 durante toda la vigencia del descuento",
+        necesita: "la ventana de compra con y sin descuento",
+        seConfirma: "el gerente revisa cada caso antes de cortar",
+        excepcion: "zona con competencia activa → condicionar en vez de cortar",
+        propone: "cortar",
+        params: { umbral_compra: 1.0 },
+        cambio:
+          "Se activó tras el período de prueba: el criterio separó bien los descuentos que movieron compra de los que no. En zonas con competencia propone condicionar, no cortar, para no abrir la puerta al competidor.",
+        estado: "activa",
       },
     ],
   },

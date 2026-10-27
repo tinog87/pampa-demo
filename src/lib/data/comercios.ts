@@ -243,10 +243,10 @@ function mulberry32(seed: number) {
 }
 
 const NOMBRES: Record<Tipo, string[]> = {
-  almacen: ["Almacén La Providencia", "Almacén Doña Nelly", "Almacén El Progreso", "Despensa San Cayetano", "Almacén Los Hermanos", "Almacén La Esperanza", "Despensa El Rincón", "Almacén San José"],
-  kiosco: ["Kiosco La Parada", "Maxikiosco Belgrano", "Kiosco El Túnel", "Kiosco Las Vías", "Kiosco 24 Horas", "Kiosco La Central", "Maxikiosco El Faro"],
-  autoservicio: ["Autoservicio La Famiglia", "Super Las Américas", "Autoservicio Don Pedro", "Mercadito Sur", "Autoservicio El Trébol", "Super La Estrella"],
-  gastronomia: ["Bar El Fondín", "Pizzería Nápoles", "Café de la Plaza", "Rotisería El Buen Sabor", "Bar La Esquina del Gol"],
+  almacen: ["Almacén La Providencia", "Almacén Doña Nelly", "Almacén El Progreso", "Despensa San Cayetano", "Almacén Los Hermanos", "Almacén La Esperanza", "Despensa El Rincón", "Almacén San José", "Almacén El Ancla", "Despensa Las Violetas", "Almacén Don Aníbal", "Almacén La Favorita", "Despensa Primavera", "Almacén El Molino"],
+  kiosco: ["Kiosco La Parada", "Maxikiosco Belgrano", "Kiosco El Túnel", "Kiosco Las Vías", "Kiosco 24 Horas", "Kiosco La Central", "Maxikiosco El Faro", "Kiosco El Puente", "Kiosco Estación", "Maxikiosco San Martín", "Kiosco La Rambla"],
+  autoservicio: ["Autoservicio La Famiglia", "Super Las Américas", "Autoservicio Don Pedro", "Mercadito Sur", "Autoservicio El Trébol", "Super La Estrella", "Autoservicio Riachuelo", "Super El Nene", "Mercadito La Loma", "Autoservicio Dos Hermanos"],
+  gastronomia: ["Bar El Fondín", "Pizzería Nápoles", "Café de la Plaza", "Rotisería El Buen Sabor", "Bar Don Rufino", "Pizzería La Rueda", "Parrilla El Tano", "Café Martínez y Cía"],
 };
 
 const TIPOS: Tipo[] = ["almacen", "kiosco", "autoservicio", "gastronomia"];
@@ -285,6 +285,18 @@ function generados(): Comercio[] {
   const base = Math.floor(TOTAL_GEN / ZONAS.length);
   const resto = TOTAL_GEN - base * ZONAS.length;
 
+  // Nombres ya usados: el mismo nombre no se repite indistinguible en la lista.
+  // Si choca, se desambigua con el barrio y, si hace falta, con un número.
+  const usados = new Set<string>();
+  const nombreUnico = (base: string, barrio: string): string => {
+    let nombre = base;
+    if (usados.has(nombre)) nombre = `${base} · ${barrio}`;
+    let i = 2;
+    while (usados.has(nombre)) nombre = `${base} · ${barrio} ${i++}`;
+    usados.add(nombre);
+    return nombre;
+  };
+
   let n = 1;
   ZONAS.forEach((zona, zi) => {
     const cantidad = base + (zi < resto ? 1 : 0);
@@ -308,10 +320,10 @@ function generados(): Comercio[] {
       const confRnd = rnd();
       const confianza = confRnd < 0.78 ? "alta" : confRnd < 0.93 ? "media" : "baja";
 
-      const nombre = pick(NOMBRES[tipo]);
       const barrio = pick(barrios);
+      const nombre = nombreUnico(pick(NOMBRES[tipo]), barrio);
 
-      const built = construirInversiones(zona.piloto, puertas, ratio, confianza, rnd);
+      const built = construirInversiones(zona.piloto, puertas, ratio, confianza, competenciaActiva, rnd);
 
       out.push({
         id: `cm-${String(n).padStart(4, "0")}`,
@@ -350,6 +362,7 @@ function construirInversiones(
   puertas: number,
   ratio: number,
   confianza: "alta" | "media" | "baja",
+  competenciaActiva: boolean,
   rnd: () => number
 ): { inversiones: Inversion[]; fotoFrio?: FotoFrio; acuerdo?: AcuerdoLinea[] } {
   const inv: Inversion[] = [];
@@ -359,12 +372,16 @@ function construirInversiones(
   // --- Frío ---
   if (puertas > 0) {
     const montoActual = puertas * PRECIO_EQUIPO;
-    if (confianza === "baja") {
-      // Registro dudoso: foto sin heladera, A validar. No se propone nada.
+    if (confianza === "baja" && ratio < 0.25) {
+      // Registro dudoso: compra casi nula pero figura heladera y la foto no la muestra.
+      // No se propone nada: una persona valida el registro primero.
       fotoFrio = { estado: "sin_heladera", visitas: 1, confianza: "baja", lectura: lecturaFrio("sin_heladera", "baja") };
       inv.push(frio(montoActual, montoActual, "mantener", null, "a_validar", "baja"));
+    } else if (confianza === "baja") {
+      // Dato de compra poco confiable, pero no hay contradicción con la foto: se valida el dato.
+      inv.push(frio(montoActual, montoActual, "mantener", null, "a_validar", "baja"));
     } else if (ratio < 0.85) {
-      // Candidato de frío. Las compras marcan, la foto confirma.
+      // Candidato de frío. Las compras marcan, la foto confirma o despeja.
       const tieneFoto = rnd() < 0.72;
       if (!tieneFoto) {
         // Sin foto: no se propone acción. Pide foto.
@@ -376,41 +393,46 @@ function construirInversiones(
         fotoFrio = { estado, visitas: estado === "llena_pampa" ? 2 : 1, confianza, lectura: lecturaFrio(estado, confianza) };
         if (estado === "llena_pampa" && ratio < 0.5) {
           inv.push(frio(montoActual, Math.max(0, montoActual - PRECIO_EQUIPO), "mover", "Compra muy por debajo de sus parecidos y la heladera está llena de Pampa en 2 visitas: hay equipo, no demanda.", "pendiente", confianza));
+        } else if (estado === "llena_pampa") {
+          // Compra algo por debajo, pero la foto la muestra llena de Pampa y por encima del
+          // umbral de mover: está sana. La foto despeja, no se toca.
+          inv.push(frio(montoActual, montoActual, "mantener", "Compra algo por debajo de sus parecidos, pero la foto la muestra llena de Pampa: está sana, no se toca.", "justificado", confianza));
         } else {
           const motivo =
             estado === "vacia"
               ? "Vacía: hay demanda sin cubrir. Se ajusta el pedido."
               : estado === "otra_marca"
                 ? "La demanda la aprovecha otra marca. Se recupera el espacio."
-                : estado === "rota"
-                  ? "Heladera rota o apagada: no puede vender. Va técnico."
-                  : "Llena de Pampa pero no tan baja: se corrige ejecución antes de mover.";
+                : "Heladera rota o apagada: no puede despachar. Va técnico.";
           inv.push(frio(montoActual, montoActual, "corregir", motivo, "pendiente", confianza));
         }
       }
     } else {
-      inv.push(frio(montoActual, montoActual, "mantener", "Rinde en línea con sus parecidos.", "justificado", confianza));
+      inv.push(frio(montoActual, montoActual, "mantener", "Compra en línea con sus parecidos.", "justificado", confianza));
     }
   } else if (ratio > 1.5) {
     // Sin heladera y compra mucho: candidato a sumar.
     inv.push(frio(0, PRECIO_EQUIPO, "sumar", "Compra bastante más que sus parecidos y no tiene heladera. Recibe un equipo liberado.", "pendiente", confianza));
   }
 
-  // --- Descuentos (la regla está EN PRUEBA: no propone; solo cuenta) ---
-  if (rnd() < 0.35) {
-    const m = 500 + Math.floor(rnd() * 3500);
-    const movio = ratio > 1.0;
-    if (movio) {
-      inv.push({ linea: "descuentos", montoActual: m, montoPropuesto: m, accion: "renovar", motivo: "Movió volumen durante la vigencia del descuento.", estadoMonto: "justificado", confianza: "media" });
+  // --- Descuentos (la regla está ACTIVA: propone sobre evidencia de compra) ---
+  if (rnd() < 0.3) {
+    const m = 300 + Math.floor(rnd() * 1400);
+    if (ratio > 1.0) {
+      // Movió compra durante la vigencia: el descuento rindió, se renueva.
+      inv.push({ linea: "descuentos", montoActual: m, montoPropuesto: m, accion: "renovar", motivo: "Durante la vigencia compró más que sus parecidos: el descuento movió compra. Se renueva.", estadoMonto: "justificado", confianza: "media" });
+    } else if (competenciaActiva) {
+      // No movió compra, pero la zona tiene competencia: se condiciona en vez de cortar.
+      inv.push({ linea: "descuentos", montoActual: m, montoPropuesto: m, accion: "condicionar", motivo: `No movió compra durante la vigencia (compra ${Math.round(ratio * 100)}% de sus parecidos). La zona tiene competencia activa: se condiciona en vez de cortar.`, condicion: "se mantiene si compra 10% más en 3 meses", estadoMonto: "pendiente", confianza: "media" });
     } else {
-      // Habría marcado la regla en prueba, pero no propone. Queda sin justificar.
-      inv.push({ linea: "descuentos", montoActual: m, montoPropuesto: m, accion: "mantener", motivo: null, estadoMonto: "sin_justificar", confianza: "media" });
+      // No movió compra y no hay competencia que cubrir: se corta y libera.
+      inv.push({ linea: "descuentos", montoActual: m, montoPropuesto: 0, accion: "cortar", motivo: `No movió compra durante la vigencia (compra ${Math.round(ratio * 100)}% de sus parecidos). Sin razón para sostenerlo: se corta y se libera.`, estadoMonto: "pendiente", confianza: "media" });
     }
   }
 
   // --- Acuerdos (control de foto solo en piloto) ---
-  if (rnd() < 0.28) {
-    const m = 2000 + Math.floor(rnd() * 4000);
+  if (rnd() < 0.2) {
+    const m = 800 + Math.floor(rnd() * 1500);
     if (piloto) {
       const cumple = rnd() < 0.6;
       if (cumple) {
@@ -420,20 +442,22 @@ function construirInversiones(
           { pactado: "2 cabeceras", foto: "1 cabecera", cumple: false },
           { pactado: "40% del espacio", foto: "25%", cumple: false },
         ];
-        inv.push({ linea: "acuerdos", montoActual: m, montoPropuesto: m, accion: "corregir", motivo: "La foto muestra menos espacio que lo pactado. Se reclama.", estadoMonto: "pendiente", confianza: "media" });
+        inv.push({ linea: "acuerdos", montoActual: m, montoPropuesto: m, accion: "corregir", motivo: "La foto muestra menos espacio que lo pactado. Se reclama lo acordado.", estadoMonto: "pendiente", confianza: "media" });
       }
     } else {
-      // Fuera de piloto no hay foto de exhibición: si no hay contrato cargado, A validar.
+      // Fuera de piloto no hay foto de exhibición: si falta el contrato, va A validar.
       const sinContrato = rnd() < 0.3;
-      inv.push({ linea: "acuerdos", montoActual: m, montoPropuesto: m, accion: sinContrato ? "renovar" : "renovar", motivo: sinContrato ? null : "Contrato vigente; sin control de foto fuera de piloto.", estadoMonto: sinContrato ? "a_validar" : "justificado", confianza: "media" });
+      inv.push({ linea: "acuerdos", montoActual: m, montoPropuesto: m, accion: "renovar", motivo: sinContrato ? null : "Contrato vigente; sin control de foto fuera de piloto.", estadoMonto: sinContrato ? "a_validar" : "justificado", confianza: "media" });
     }
   }
 
-  // --- Exhibición y material (por zona en el ciclo; aquí a nivel comercio para la demo) ---
+  // --- Exhibición y material (se asigna por zona según el plan, no por comercio) ---
   if (rnd() < 0.5) {
-    const m = 1500 + Math.floor(rnd() * 3500);
-    const justificado = ratio > 1.1;
-    inv.push({ linea: "exhibicion", montoActual: m, montoPropuesto: m, accion: "mantener", motivo: justificado ? "Reparto en línea con lo que compra." : null, estadoMonto: justificado ? "justificado" : "sin_justificar", confianza: "media" });
+    const m = 500 + Math.floor(rnd() * 1250);
+    // Por defecto queda justificado por el plan de zona. Una minoría no tiene plan
+    // cargado: ahí no se puede justificar el reparto (hallazgo para Finanzas).
+    const sinPlan = rnd() < 0.18;
+    inv.push({ linea: "exhibicion", montoActual: m, montoPropuesto: m, accion: "mantener", motivo: sinPlan ? null : "Exhibición y material del plan de zona (se asigna por zona, no por comercio).", estadoMonto: sinPlan ? "sin_justificar" : "justificado", confianza: "media" });
   }
 
   return { inversiones: inv, fotoFrio, acuerdo };

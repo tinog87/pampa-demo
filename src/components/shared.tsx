@@ -46,7 +46,7 @@ export function Porque({ d }: { d: Decision }) {
             <span className="font-medium text-ink">Condición:</span> {d.condicion}
           </p>
         ) : null}
-        {c?.fotoFrio ? (
+        {d.linea === "frio" && c?.fotoFrio ? (
           <div className="flex items-start gap-3">
             <div className="w-20 shrink-0">
               <FridgeSvg estado={c.fotoFrio.estado} />
@@ -58,6 +58,22 @@ export function Porque({ d }: { d: Decision }) {
                 </div>
               ))}
             </div>
+          </div>
+        ) : null}
+        {d.linea === "acuerdos" && c?.acuerdo ? (
+          <div className="overflow-hidden rounded-md border border-line">
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2 bg-card px-2.5 py-1 text-[11px] font-medium text-muted">
+              <span>Pactado</span>
+              <span>En la foto</span>
+              <span>¿Cumple?</span>
+            </div>
+            {c.acuerdo.map((a) => (
+              <div key={a.pactado} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 border-t border-line px-2.5 py-1 text-xs">
+                <span className="text-ink-soft">{a.pactado}</span>
+                <span className="text-ink-soft">{a.foto}</span>
+                <span className={a.cumple ? "text-ok-ink" : "text-bad-ink"}>{a.cumple ? "Sí" : "No"}</span>
+              </div>
+            ))}
           </div>
         ) : null}
         {regla ? (
@@ -164,12 +180,15 @@ const FOTO_CORTA: Record<EstadoHeladera, string> = {
   sin_heladera: "sin heladera",
 };
 
-// Señales que el sistema cruzó para marcar la propuesta (compra + foto + regla).
+// Señales que el sistema cruzó para marcar la propuesta (compra + evidencia de la línea + regla).
 function senalesSistema(d: Decision): string[] {
   const c = getComercio(d.comercioId);
   const out: string[] = [];
   if (c) out.push(`compra ${Math.round(c.compraVsParecidos * 100)}% de sus parecidos`);
-  if (c?.fotoFrio) out.push(`foto ${FOTO_CORTA[c.fotoFrio.estado]}`);
+  // La evidencia depende de la línea: la foto de la heladera solo aplica a Frío.
+  if (d.linea === "frio" && c?.fotoFrio) out.push(`foto ${FOTO_CORTA[c.fotoFrio.estado]}`);
+  if (d.linea === "acuerdos" && c?.acuerdo?.some((a) => !a.cumple)) out.push("foto: menos espacio que lo pactado");
+  if (d.linea === "descuentos") out.push("no movió compra durante la vigencia");
   const regla = d.reglaId ? getRegla(d.reglaId) : undefined;
   if (regla) out.push(`regla: ${regla.nombre.toLowerCase()}`);
   return out;
