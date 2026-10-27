@@ -19,7 +19,7 @@ export const ZONAS: Zona[] = [
   { id: "la-plata", nombre: "La Plata", short: "LP", piloto: false, competenciaActiva: false },
   { id: "cordoba-cap", nombre: "Córdoba Capital", short: "CBA", piloto: false, competenciaActiva: false },
   { id: "cordoba-int", nombre: "Córdoba Interior", short: "CBI", piloto: false, competenciaActiva: false },
-  { id: "cuyo", nombre: "Cuyo", short: "CUY", piloto: false, competenciaActiva: false },
+  { id: "cuyo", nombre: "Cuyo", short: "CUY", piloto: true, competenciaActiva: false },
   { id: "rosario", nombre: "Rosario", short: "ROS", piloto: false, competenciaActiva: true },
   { id: "mardel", nombre: "Mar del Plata", short: "MDP", piloto: false, competenciaActiva: false },
   { id: "noa", nombre: "Noroeste (NOA)", short: "NOA", piloto: false, competenciaActiva: false },

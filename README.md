@@ -11,6 +11,8 @@ sostiene.
 > Datos ilustrativos. Las aprobaciones viven en memoria del navegador: se reinician al
 > recargar la página.
 
+📖 **Onboarding de la demo (qué es, roles, pantallas y recorrido guiado): [GUIA.md](GUIA.md).**
+
 ---
 
 ## Cómo correrlo
@@ -35,18 +37,23 @@ npx serve out      # servir out/ en http://localhost:3000
 
 ## Qué hay para ver
 
-Arriba a la izquierda hay un selector **"Viendo como"**: cambiá de rol
-(Preventista, Supervisor, Gerente, Trade, Finanzas, Dirección) y mirá cómo cambia lo que
-cada persona ve y puede decidir.
+Arriba a la izquierda hay un selector **"Viendo como"**: cambiá de rol y mirá cómo cambian
+el menú, la bandeja y lo que cada persona puede decidir. Cada rol ve solo lo suyo
+(2–3 opciones de menú).
 
-| Pantalla | Qué muestra |
+| Rol | Ve |
 | --- | --- |
-| **Bandeja** (inicio) | Lo que el sistema empuja hacia el rol activo: **alertas** (vencidas, Finanzas sin justificación, dato dudoso, competencia, reglas en prueba), lo que **te toca decidir** (aprobar / pedir foto / rechazar, en vivo) y la **actividad reciente**. Lo que hacés aparece arriba al instante. |
-| **Mapa** | Las 14 zonas por share de bajo retorno. Clic en una zona → sus comercios, su inversión por línea y sus **zonas parecidas** para comparar. |
-| **Presupuesto** | El contexto nacional (USD 51,5 M), los indicadores del ciclo y el presupuesto por zona → línea → comercio. |
-| **Comercio** (clic en una fila) | La **cadena de trazabilidad**: presupuesto → inversión → compra vs parecidos → foto → decisión → aprobación → resultado. El doble click del sistema. |
-| **Reglas** | Las reglas como texto con parámetros y **versiones**, con su historial y qué cambió en cada una. |
-| **Fotos** | La lectura de IA de la foto de la visita y la verificación de acuerdos de exhibición (lo pactado vs la foto). |
+| **Gerente de zona** (inicio) | **Bandeja** (propuestas, pedidos, alertas y resueltos), **Mi zona** (lo que pide la zona vs el techo de Finanzas) y **Comercios** (buscador + ficha con la cadena completa y botón para **cargar un pedido**). |
+| **Preventista** | **Hoy** y **Hechas**: tareas del día en el celular (sacar foto, ajustar pedido). Nunca ve plata. |
+| **Supervisor** | **Para aprobar**, **Revisar fotos** (lectura de IA + precisión) y **Mi equipo**. |
+| **Trade** | **Reglas** (con simulador de impacto y versiones) y **Derivados a Trade**. |
+| **Finanzas** | **Presupuesto** (techo editable, por zona/línea/motivo, CSV) y **Ciclo en curso**. |
+| **Dirección** | **Resumen** por zona y **Presupuesto** en solo lectura. |
+
+La **ficha de un comercio** (clic en una fila) muestra la **cadena de trazabilidad** completa:
+presupuesto → inversión → compra vs parecidos → foto → decisión → aprobación → registro.
+
+👉 El recorrido guiado paso a paso está en **[GUIA.md](GUIA.md)**.
 
 ---
 
@@ -72,14 +79,18 @@ cada persona ve y puede decidir.
 
 ```
 src/
-  app/                 Rutas (Presupuesto, comercio/[id], bandeja, reglas, foto/[id])
-  components/          AppShell, cadena de trazabilidad, foto SVG, acciones de decisión, UI
+  app/                 Una ruta por pantalla de rol: / (home por rol), mi-zona, comercios,
+                       comercio (ficha por ?id=), revisar-fotos, mi-equipo, hechas,
+                       reglas, derivados, presupuesto, ciclo, resumen
+  components/          AppShell (nav por rol), views-{rol}, cadena de trazabilidad,
+                       foto SVG, acciones de decisión, UI
   lib/
-    types.ts           El modelo (espeja las 5 tablas clave del técnico)
+    types.ts           El modelo (espeja las tablas clave del técnico)
     data/              Seed: comercios, reglas, derivación de decisiones y presupuesto
-    store.ts           Estado de aprobaciones (Zustand)
+    store.ts           Estado de aprobaciones, techos y pedidos (Zustand, en memoria)
     format.ts          Formato y etiquetas
 schema.sql             Modelo de datos Postgres (artefacto)
+GUIA.md                Onboarding de la demo (roles, pantallas, recorrido guiado)
 ```
 
 ---
