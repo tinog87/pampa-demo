@@ -49,11 +49,18 @@ cada persona ve y puede decidir.
 
 ---
 
-## Cómo está hecho
+## Stack técnico
 
-- **Next.js 16** (App Router) + **React 19** + **TypeScript** + **Tailwind CSS v4**.
-- Tipografía **Geist** (la misma familia de los documentos de Relu).
-- Estado de las aprobaciones con **Zustand** (en memoria).
+| Herramienta | Versión | Para qué |
+| --- | --- | --- |
+| [Next.js](https://nextjs.org) (App Router) | 16.4.3 | Framework React y ruteo. Build a sitio estático (`output: export`). |
+| [React](https://react.dev) | 19.3.0 | UI. |
+| [TypeScript](https://www.typescriptlang.org) | 5.x | Tipado en todo el código. |
+| [Tailwind CSS](https://tailwindcss.com) | 4.x | Estilos, con los tokens de marca de Relu. |
+| [Zustand](https://zustand.docs.pmnd.rs) | 5.0.x | Estado de las aprobaciones (en memoria del navegador). |
+| [Geist / Geist Mono](https://vercel.com/font) | `next/font` | Tipografía (la misma familia de los documentos de Relu). |
+| Node.js | 20+ | Entorno para correr y buildear. |
+
 - **Sin backend**: los datos están seedeados en el repo (`src/lib/data/`), con la misma
   forma que el modelo real. Por eso la app es 100% estática y corre en cualquier lado.
 - [`schema.sql`](./schema.sql) tiene el **modelo de datos Postgres** real (las tablas clave
