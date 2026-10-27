@@ -100,13 +100,13 @@ export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }
 
   return (
     <div>
-      <PageTitle sub="El próximo ciclo, el acumulado de todas las zonas de la muestra. Fijás el techo y los montos de aprobación.">
-        Presupuesto · próximo ciclo
+      <PageTitle sub="El próximo período, el acumulado de todas las zonas de la muestra. Fijás el techo y los montos de aprobación.">
+        Presupuesto · próximo período
       </PageTitle>
 
       <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile value={usd(techoTotal)} label={readOnly ? "techo de Finanzas" : "techo (editable abajo)"} />
-        <StatTile value={usd(pidenTotal)} label="pedido del próximo ciclo" tono="warn" />
+        <StatTile value={usd(pidenTotal)} label="pedido del próximo período" tono="warn" />
         <StatTile value={usd(dif)} label={dif > 0 ? "por encima del techo" : "margen bajo el techo"} tono={dif > 0 ? "bad" : "ok"} />
         <StatTile value={usd(totales.porEstado.a_validar)} label="a validar" tono="warn" />
       </div>

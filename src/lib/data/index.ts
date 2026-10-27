@@ -247,17 +247,17 @@ export const EFECTO_PILOTO: Record<string, { compra: string; comercios: number; 
   norte: {
     compra: "+4,8%",
     comercios: 142,
-    nota: "Con competencia activa el efecto es más chico, pero sostiene la compra frente al competidor.",
+    nota: "En los comercios intervenidos, la compra subió 4,8% contra parecidos sin intervención. Con competencia activa el efecto es más chico, pero sostiene la compra frente al competidor.",
   },
   litoral: {
     compra: "+7,2%",
     comercios: 96,
-    nota: "Sin competencia fuerte: mover frío a los que más compran levantó la compra de la zona.",
+    nota: "En los comercios intervenidos, la compra subió 7,2% contra parecidos sin intervención, al mover frío a los que más compran.",
   },
   cuyo: {
     compra: "+5,5%",
     comercios: 78,
-    nota: "Interior: el efecto se concentró en los acuerdos de exhibición reclamados.",
+    nota: "En los comercios intervenidos, la compra subió 5,5% contra parecidos sin intervención, concentrado en los acuerdos de exhibición reclamados.",
   },
 };
 

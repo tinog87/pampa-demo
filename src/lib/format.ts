@@ -82,7 +82,7 @@ export const ESTADO_LABEL: Record<EstadoDecision, string> = {
   medida: "Medida",
   devuelta: "Devuelta",
   rechazada: "Rechazada",
-  proximo_ciclo: "Para el próximo ciclo",
+  proximo_ciclo: "Para el próximo período",
   pide_foto: "Pide foto",
   a_validar: "A validar",
 };

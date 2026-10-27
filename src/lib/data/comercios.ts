@@ -242,11 +242,31 @@ function mulberry32(seed: number) {
   };
 }
 
+// Nombres por combinación prefijo × núcleo: da pools grandes y naturales, suficientes
+// para que cada zona tenga nombres distintos sin recurrir a sufijos numéricos.
+function combinarNombres(prefijos: string[], nucleos: string[]): string[] {
+  const out: string[] = [];
+  for (const nuc of nucleos) for (const pre of prefijos) out.push(`${pre} ${nuc}`);
+  return out;
+}
+
 const NOMBRES: Record<Tipo, string[]> = {
-  almacen: ["Almacén La Providencia", "Almacén Doña Nelly", "Almacén El Progreso", "Despensa San Cayetano", "Almacén Los Hermanos", "Almacén La Esperanza", "Despensa El Rincón", "Almacén San José", "Almacén El Ancla", "Despensa Las Violetas", "Almacén Don Aníbal", "Almacén La Favorita", "Despensa Primavera", "Almacén El Molino"],
-  kiosco: ["Kiosco La Parada", "Maxikiosco Belgrano", "Kiosco El Túnel", "Kiosco Las Vías", "Kiosco 24 Horas", "Kiosco La Central", "Maxikiosco El Faro", "Kiosco El Puente", "Kiosco Estación", "Maxikiosco San Martín", "Kiosco La Rambla"],
-  autoservicio: ["Autoservicio La Famiglia", "Super Las Américas", "Autoservicio Don Pedro", "Mercadito Sur", "Autoservicio El Trébol", "Super La Estrella", "Autoservicio Riachuelo", "Super El Nene", "Mercadito La Loma", "Autoservicio Dos Hermanos"],
-  gastronomia: ["Bar El Fondín", "Pizzería Nápoles", "Café de la Plaza", "Rotisería El Buen Sabor", "Bar Don Rufino", "Pizzería La Rueda", "Parrilla El Tano", "Café Martínez y Cía"],
+  almacen: combinarNombres(
+    ["Almacén", "Despensa", "Provisión"],
+    ["La Providencia", "Doña Nelly", "El Progreso", "San Cayetano", "Los Hermanos", "La Esperanza", "El Rincón", "San José", "El Ancla", "Las Violetas", "Don Aníbal", "La Favorita", "Primavera", "El Molino", "Doña Rosa", "Don Carlos", "La Unión", "Santa Rita", "El Trigal", "La Loma", "San Roque", "El Candil", "Los Álamos", "La Estación", "El Fortín", "La Delicia", "San Pedro", "La Bahía", "El Ombú", "La Criolla"]
+  ),
+  kiosco: combinarNombres(
+    ["Kiosco", "Maxikiosco"],
+    ["La Parada", "Belgrano", "El Túnel", "Las Vías", "24 Horas", "La Central", "El Faro", "El Puente", "Estación", "San Martín", "La Rambla", "El Cruce", "Primera Junta", "El Recreo", "La Terminal", "La Plaza", "Don Lucho", "La Amistad", "El Nono", "San Juan", "La Vía", "El Pasaje", "Las Heras", "Rivadavia", "El Obelisco", "La Quintana", "Alberdi", "El Tranvía", "La Curva", "El Semáforo", "San Lorenzo", "La Posta", "El Alto", "La Movida", "El Quincho", "La Redonda"]
+  ),
+  autoservicio: combinarNombres(
+    ["Autoservicio", "Super", "Mercadito", "Minimercado"],
+    ["La Famiglia", "Las Américas", "Don Pedro", "del Sur", "El Trébol", "La Estrella", "Riachuelo", "El Nene", "La Loma", "Dos Hermanos", "La Economía", "El Ahorro", "San Blas", "La Ribera"]
+  ),
+  gastronomia: combinarNombres(
+    ["Bar", "Café", "Rotisería", "Pizzería", "Parrilla"],
+    ["El Fogón", "La Rueda", "Don Rufino", "El Tano", "San Telmo", "El Andén", "Lo de Beto", "El Recreo"]
+  ),
 };
 
 const TIPOS: Tipo[] = ["almacen", "kiosco", "autoservicio", "gastronomia"];
@@ -285,22 +305,24 @@ function generados(): Comercio[] {
   const base = Math.floor(TOTAL_GEN / ZONAS.length);
   const resto = TOTAL_GEN - base * ZONAS.length;
 
-  // Nombres ya usados: el mismo nombre no se repite indistinguible en la lista.
-  // Si choca, se desambigua con el barrio y, si hace falta, con un número.
-  const usados = new Set<string>();
-  const nombreUnico = (base: string, barrio: string): string => {
-    let nombre = base;
-    if (usados.has(nombre)) nombre = `${base} · ${barrio}`;
-    let i = 2;
-    while (usados.has(nombre)) nombre = `${base} · ${barrio} ${i++}`;
-    usados.add(nombre);
-    return nombre;
-  };
-
   let n = 1;
   ZONAS.forEach((zona, zi) => {
     const cantidad = base + (zi < resto ? 1 : 0);
     const barrios = BARRIOS[zona.id] ?? ["Centro"];
+    // Un nombre no se repite dentro de la zona: si el elegido ya está, se toma otro
+    // del pool (nunca un sufijo numérico). Los pools son grandes para que siempre alcance.
+    const usadosZona = new Set<string>();
+    const nombreDeZona = (tipo: Tipo): string => {
+      const pool = NOMBRES[tipo];
+      let idx = Math.floor(rnd() * pool.length);
+      let intentos = 0;
+      while (usadosZona.has(pool[idx]) && intentos < pool.length) {
+        idx = (idx + 1) % pool.length;
+        intentos++;
+      }
+      usadosZona.add(pool[idx]);
+      return pool[idx];
+    };
 
     for (let i = 0; i < cantidad; i++) {
       const tipo = weighted(rnd, TIPOS, [0.4, 0.3, 0.2, 0.1]);
@@ -321,7 +343,7 @@ function generados(): Comercio[] {
       const confianza = confRnd < 0.78 ? "alta" : confRnd < 0.93 ? "media" : "baja";
 
       const barrio = pick(barrios);
-      const nombre = nombreUnico(pick(NOMBRES[tipo]), barrio);
+      const nombre = nombreDeZona(tipo);
 
       const built = construirInversiones(zona.piloto, puertas, ratio, confianza, competenciaActiva, rnd);
 

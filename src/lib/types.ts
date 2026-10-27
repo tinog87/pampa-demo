@@ -81,7 +81,7 @@ export type AcuerdoLinea = {
 export type Inversion = {
   linea: Linea;
   montoActual: number; // ciclo en curso
-  montoPropuesto: number; // próximo ciclo
+  montoPropuesto: number; // próximo período
   accion: Accion;
   motivo: string | null; // null => sin justificación (hallazgo, no tarea)
   condicion?: string; // para Condicionar (descuentos): siempre dice la condición

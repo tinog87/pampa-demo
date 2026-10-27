@@ -51,7 +51,7 @@ function ejecucionFrase(a: Accion): string {
   }
 }
 
-// Columna del tablero: título, contador y las tarjetas (con tope para no explotar).
+// Columna: título, contador y las tarjetas (con tope para no explotar).
 function Columna({ titulo, items, tono, children }: { titulo: string; items: number; tono: Tono; children: ReactNode }) {
   return (
     <div className="rounded-xl bg-panel p-3">
@@ -132,7 +132,7 @@ export function GerenteBandeja() {
 
   return (
     <div>
-      <PageTitle sub="Tu tablero: lo que espera aprobación, lo que pide foto y lo que hay que validar en la zona.">Bandeja</PageTitle>
+      <PageTitle sub="Lo que te toca: lo que espera aprobación, lo que pide foto y lo que hay que validar en la zona.">Bandeja</PageTitle>
 
       <div className="mb-6 grid grid-cols-3 gap-3">
         <StatTile value={stats.esperan} label="esperan tu aprobación" tono={stats.esperan > 0 ? "warn" : "ok"} />
@@ -272,7 +272,7 @@ export function GerenteMiZona() {
 
   return (
     <div>
-      <PageTitle sub="Cuánto pide tu zona para el próximo ciclo y cómo queda contra el techo de Finanzas.">Mi zona · {roll.zona.nombre}</PageTitle>
+      <PageTitle sub="Cuánto pide tu zona para el próximo período y cómo queda contra el techo de Finanzas.">Mi zona · {roll.zona.nombre}</PageTitle>
 
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile value={usd(roll.montoActual)} label="inversión actual" />
