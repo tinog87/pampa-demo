@@ -86,10 +86,21 @@ export function Porque({ d }: { d: Decision }) {
   );
 }
 
+// Jerarquía de aprobación: un rol más alto puede aprobar lo de un rol más bajo.
+// (El supervisor no aprueba lo del gerente, pero el gerente sí lo del supervisor.)
+const RANGO_APROBACION: Partial<Record<Rol, number>> = { supervisor: 1, gerente: 2, direccion: 3 };
+
+export function puedeAprobar(rol: Rol, apruebaRol: Rol | "auto"): boolean {
+  if (rol === apruebaRol) return true;
+  const r = RANGO_APROBACION[rol];
+  const a = apruebaRol === "auto" ? undefined : RANGO_APROBACION[apruebaRol];
+  return r !== undefined && a !== undefined && r >= a;
+}
+
 type Transicion = { label: string; to: EstadoDecision; tono: "ink" | "line" | "bad"; pideMotivo?: boolean };
 
 function transiciones(rol: Rol, estado: EstadoDecision, d: Decision): Transicion[] {
-  const miNivel = rol === d.apruebaRol;
+  const miNivel = puedeAprobar(rol, d.apruebaRol);
   if (estado === "esperando" && miNivel)
     return [
       { label: "Aprobar", to: "aprobada", tono: "ink" },
@@ -147,6 +158,9 @@ export function DecisionActions({ d }: { d: Decision }) {
       </Badge>
       {d.auto && estado === "aprobada" ? (
         <span className="text-xs text-muted">Automática · monto bajo, dato claro</span>
+      ) : null}
+      {rol !== d.apruebaRol && d.apruebaRol !== "auto" && puedeAprobar(rol, d.apruebaRol) && (estado === "esperando" || estado === "a_validar") ? (
+        <span className="text-xs text-faint">Nivel {ROL_LABEL[d.apruebaRol as Rol] ?? d.apruebaRol} · podés aprobarla vos</span>
       ) : null}
       {trans.length > 0 ? (
         <div className="ml-auto flex flex-wrap gap-1.5">
