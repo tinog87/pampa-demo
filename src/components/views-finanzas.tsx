@@ -26,6 +26,27 @@ function sum(xs: number[]) {
   return xs.reduce((a, b) => a + b, 0);
 }
 
+// Comercios de una zona que mueven el pedido (actual ≠ propuesto), con la inversión
+// que explica el cambio. Ordenados por diferencia: primero los que piden más.
+function comerciosQueMueven(zonaId: string) {
+  const filas = COMERCIOS.filter((c) => c.zonaId === zonaId)
+    .map((c) => {
+      const actual = sum(c.inversiones.map((i) => i.montoActual));
+      const pide = sum(c.inversiones.map((i) => i.montoPropuesto));
+      const driver = [...c.inversiones].sort(
+        (a, b) => Math.abs(b.montoPropuesto - b.montoActual) - Math.abs(a.montoPropuesto - a.montoActual)
+      )[0];
+      return { c, actual, pide, delta: pide - actual, driver };
+    })
+    .filter((f) => f.delta !== 0);
+  filas.sort((a, b) => b.delta - a.delta);
+  return filas;
+}
+
+function usdSigno(n: number) {
+  return `${n > 0 ? "+" : ""}${usd(n)}`;
+}
+
 export function FinanzasPresupuesto({ readOnly = false }: { readOnly?: boolean }) {
   const { techos, setTecho, propuestas } = useApp();
   const zonas = presupuestoPorZona();
@@ -175,18 +196,77 @@ function ZonaFilas({ z, abierta, toggle, techo, justPct, readOnly, setTecho }: {
       {abierta ? (
         <tr className="border-b border-line bg-panel">
           <td colSpan={5} className="px-4 py-3">
-            <div className="space-y-1.5">
+            {/* Por línea */}
+            <div className="mb-4 grid gap-1.5 sm:grid-cols-2">
               {z.lineas.map((l) => (
-                <div key={l.linea} className="flex items-center justify-between text-xs">
+                <div key={l.linea} className="flex items-center justify-between rounded-md bg-card px-3 py-1.5 text-xs">
                   <span className="text-ink-soft">{LINEA_LABEL[l.linea]}</span>
                   <span className="text-muted">actual <span className="text-ink">{usd(l.montoActual)}</span> · pide <span className="text-ink">{usd(l.montoPropuesto)}</span></span>
                 </div>
               ))}
             </div>
+
+            {/* Detalle por comercio: quién mueve el pedido y por qué */}
+            <ComerciosDeZona zonaId={z.zona.id} />
           </td>
         </tr>
       ) : null}
     </>
+  );
+}
+
+function ComerciosDeZona({ zonaId }: { zonaId: string }) {
+  const filas = comerciosQueMueven(zonaId);
+  if (filas.length === 0)
+    return <p className="text-xs text-faint">Ningún comercio de esta zona cambia su pedido: todo se mantiene.</p>;
+
+  const suben = filas.filter((f) => f.delta > 0).length;
+  const bajan = filas.filter((f) => f.delta < 0).length;
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-xs font-semibold text-ink">Comercios que mueven el pedido</h3>
+        <span className="text-[11px] text-muted">
+          {suben} piden más · {bajan} liberan equipo · {filas.length} en total
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-line bg-paper">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b border-line text-left text-[11px] text-muted">
+              <th className="px-3 py-1.5 font-medium">Comercio</th>
+              <th className="px-3 py-1.5 font-medium">Qué pide y por qué</th>
+              <th className="px-3 py-1.5 text-right font-medium">Actual → pide</th>
+              <th className="px-3 py-1.5 text-right font-medium">Diferencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(({ c, actual, pide, delta, driver }) => (
+              <tr key={c.id} className="border-b border-line last:border-0 align-top hover:bg-card">
+                <td className="px-3 py-2">
+                  <Link href={`/comercio?id=${c.id}`} className="font-medium text-ink hover:underline">
+                    {c.nombre}
+                  </Link>
+                  <div className="text-[11px] text-faint">{c.barrio}</div>
+                </td>
+                <td className="px-3 py-2">
+                  <span className="font-medium text-ink">{ACCION_LABEL[driver.accion]}</span>
+                  {driver.motivo ? <span className="text-muted"> — {driver.motivo}</span> : null}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right text-ink-soft">
+                  {usd(actual)} → {usd(pide)}
+                </td>
+                <td className={cn("whitespace-nowrap px-3 py-2 text-right font-medium", delta > 0 ? "text-warn-ink" : "text-ok-ink")}>
+                  {usdSigno(delta)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1.5 text-[11px] text-faint">Hacé clic en un comercio para ver la cadena completa: foto, decisión, aprobación y registro.</p>
+    </div>
   );
 }
 
