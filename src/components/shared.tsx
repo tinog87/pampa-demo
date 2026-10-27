@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { getComercio, reglaVigente } from "@/lib/data";
+import { getComercio, getRegla, reglaVigente } from "@/lib/data";
 import { useApp, estadoEfectivo } from "@/lib/store";
 import {
   ACCION_LABEL,
@@ -15,7 +15,7 @@ import {
   estadoTono,
   usd,
 } from "@/lib/format";
-import type { Decision, EstadoDecision, Rol } from "@/lib/types";
+import type { Decision, EstadoDecision, EstadoHeladera, Rol } from "@/lib/types";
 import type { PorEstado } from "@/lib/data";
 import { Badge, Card } from "./ui";
 import { FridgeSvg } from "./FridgeSvg";
@@ -156,11 +156,62 @@ export function DecisionActions({ d }: { d: Decision }) {
   );
 }
 
+const FOTO_CORTA: Record<EstadoHeladera, string> = {
+  llena_pampa: "llena de Pampa",
+  vacia: "vacía",
+  otra_marca: "con otra marca",
+  rota: "rota o apagada",
+  sin_heladera: "sin heladera",
+};
+
+// Señales que el sistema cruzó para marcar la propuesta (compra + foto + regla).
+function senalesSistema(d: Decision): string[] {
+  const c = getComercio(d.comercioId);
+  const out: string[] = [];
+  if (c) out.push(`compra ${Math.round(c.compraVsParecidos * 100)}% de sus parecidos`);
+  if (c?.fotoFrio) out.push(`foto ${FOTO_CORTA[c.fotoFrio.estado]}`);
+  const regla = d.reglaId ? getRegla(d.reglaId) : undefined;
+  if (regla) out.push(`regla: ${regla.nombre.toLowerCase()}`);
+  return out;
+}
+
+// Deja claro quién propuso: el sistema (con las señales que cruzó) o una persona.
+export function OrigenStrip({ d }: { d: Decision }) {
+  if (d.origen === "gerente") {
+    return (
+      <div className="mb-2 flex items-center gap-2 rounded-md bg-card px-2.5 py-1.5">
+        <svg className="size-3.5 shrink-0 text-muted" viewBox="0 0 16 16" fill="none" aria-hidden>
+          <circle cx="8" cy="5" r="2.6" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M3 13c0-2.2 2.2-3.6 5-3.6s5 1.4 5 3.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+        <span className="text-xs font-medium text-ink-soft">Pedido del gerente</span>
+      </div>
+    );
+  }
+  const senales = senalesSistema(d);
+  return (
+    <div className="mb-2 rounded-md border border-line bg-card px-2.5 py-1.5">
+      <div className="flex items-center gap-1.5">
+        <svg className="size-3.5 shrink-0 text-ink" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
+          <path d="M8 1.5l1.3 3.4L12.7 6 9.3 7.3 8 10.7 6.7 7.3 3.3 6l3.4-1.1L8 1.5z" />
+          <circle cx="12.5" cy="12" r="1.4" />
+          <circle cx="3.6" cy="11.4" r="1" />
+        </svg>
+        <span className="text-xs font-semibold text-ink">El sistema lo marcó</span>
+      </div>
+      {senales.length > 0 ? (
+        <p className="mt-0.5 pl-5 text-[11px] leading-snug text-muted">{senales.join(" · ")}</p>
+      ) : null}
+    </div>
+  );
+}
+
 // Tarjeta de decisión: una acción principal, el resto detrás de ¿Por qué?.
 export function DecisionCard({ d }: { d: Decision }) {
   const c = getComercio(d.comercioId);
   return (
     <Card className="p-4">
+      <OrigenStrip d={d} />
       <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <Link href={`/comercio?id=${d.comercioId}`} className="text-sm font-semibold text-ink hover:underline">

@@ -15,7 +15,7 @@ export type PropuestaGerente = {
   cuando: string;
 };
 
-type RegistroEntrada = {
+export type RegistroEntrada = {
   decisionId: string;
   de: EstadoDecision;
   a: EstadoDecision;

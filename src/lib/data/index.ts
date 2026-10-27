@@ -177,6 +177,14 @@ for (const d of DECISIONES) {
 export function getDecision(id: string): Decision | undefined {
   return DECISIONES.find((d) => d.id === id);
 }
+
+// Preventistas de la zona (demo) y asignación determinística de cada comercio.
+export const PREVENTISTAS = ["Acosta", "Benítez", "Cardozo"];
+export function preventistaDe(comercioId: string): string {
+  let h = 0;
+  for (let i = 0; i < comercioId.length; i++) h = (h * 31 + comercioId.charCodeAt(i)) | 0;
+  return PREVENTISTAS[Math.abs(h) % PREVENTISTAS.length];
+}
 export function decisionesDeComercio(comercioId: string): Decision[] {
   return DEC_BY_COMERCIO.get(comercioId) ?? [];
 }

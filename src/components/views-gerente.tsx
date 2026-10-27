@@ -1,30 +1,123 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   COMERCIOS,
   DECISIONES,
   alertasDe,
   estadoDe,
   getComercio,
+  getDecision,
   inboxDe,
+  preventistaDe,
   statsRol,
   zonaRollup,
 } from "@/lib/data";
 import { useApp } from "@/lib/store";
-import { ACCION_LABEL, LINEA_LABEL, TIPO_LABEL, cn, usd } from "@/lib/format";
+import type { RegistroEntrada } from "@/lib/store";
+import { ACCION_LABEL, ESTADO_LABEL, LINEA_LABEL, TIPO_LABEL, cn, estadoTono, usd } from "@/lib/format";
 import type { Alerta } from "@/lib/data";
+import type { Accion, Linea } from "@/lib/types";
 import { Badge, Card, Note, PageTitle, StatTile } from "./ui";
 import { DecisionCard, EstadoMontoBar } from "./shared";
 
+type OrigenF = "todo" | "sistema" | "gerente";
+type LineaF = "todo" | Linea;
+const LINEAS_F: Linea[] = ["frio", "descuentos", "acuerdos", "exhibicion"];
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+        active ? "border-ink bg-ink text-white" : "border-line text-ink-soft hover:bg-card"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ejecucionFrase(a: Accion): string {
+  switch (a) {
+    case "mover": return "reubica la heladera en la próxima visita";
+    case "sumar": return "instala la heladera en la próxima visita";
+    case "corregir": return "corrige el pedido o el espacio en el comercio";
+    case "condicionar": return "aplica la promoción condicionada";
+    default: return "ejecuta el cambio en la próxima visita";
+  }
+}
+
+// Una decisión que el gerente tocó, con qué pasó después y a quién le llegó.
+function SeguimientoCard({ r }: { r: RegistroEntrada }) {
+  const estados = useApp((s) => s.estados);
+  const d = getDecision(r.decisionId);
+  if (!d) return null;
+  const c = getComercio(d.comercioId);
+  const prev = preventistaDe(d.comercioId);
+  const estadoActual = estadoDe(d, estados);
+
+  const accion =
+    r.a === "aprobada" ? "La aprobaste"
+    : r.a === "rechazada" ? "La rechazaste"
+    : r.a === "pide_foto" ? "Pediste una foto"
+    : r.a === "ejecutada" ? "La marcaste ejecutada"
+    : ESTADO_LABEL[r.a];
+
+  const disparo =
+    r.a === "aprobada" ? `Se generó la tarea para el preventista ${prev}: ${ejecucionFrase(d.accion)}.`
+    : r.a === "pide_foto" ? `Se generó la tarea de foto para el preventista ${prev}.`
+    : r.a === "rechazada" ? "No se genera tarea. El monto vuelve al presupuesto de la zona."
+    : null;
+
+  return (
+    <Card className="p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <Link href={`/comercio?id=${d.comercioId}`} className="text-sm font-semibold text-ink hover:underline">
+          {c?.nombre}
+        </Link>
+        <Badge tono={estadoTono(estadoActual)} dot>{ESTADO_LABEL[estadoActual]}</Badge>
+      </div>
+      <ol className="space-y-1.5 border-l border-line pl-3 text-xs">
+        <li className="text-muted">
+          <span className="font-medium text-ink">{d.origen === "sistema" ? "El sistema lo propuso" : "Lo pediste vos"}</span>
+          {" · "}{ACCION_LABEL[d.accion]} {LINEA_LABEL[d.linea].toLowerCase()}
+        </li>
+        <li className="text-muted">
+          <span className="font-medium text-ink">{accion}</span> · {r.cuando}
+        </li>
+        {disparo ? <li className="text-ink-soft">↳ {disparo}</li> : null}
+      </ol>
+    </Card>
+  );
+}
+
 export function GerenteBandeja() {
-  const { zona, estados } = useApp();
+  const { zona, estados, registro } = useApp();
   const alertas = alertasDe("gerente", zona, estados);
   const inbox = inboxDe("gerente", zona, estados);
   const stats = statsRol("gerente", zona, estados);
 
+  const [origenF, setOrigenF] = useState<OrigenF>("todo");
+  const [lineaF, setLineaF] = useState<LineaF>("todo");
+  const inboxF = inbox.filter(
+    (d) => (origenF === "todo" || d.origen === origenF) && (lineaF === "todo" || d.linea === lineaF)
+  );
+
   const enZona = (cid: string) => getComercio(cid)?.zonaId === zona;
+
+  // Seguimiento: lo que el gerente fue decidiendo (del registro vivo), 1 por decisión.
+  const vistos = new Set<string>();
+  const seguimiento: RegistroEntrada[] = [];
+  for (const r of registro) {
+    if (r.por === "gerente" && !vistos.has(r.decisionId)) {
+      vistos.add(r.decisionId);
+      seguimiento.push(r);
+    }
+  }
+
   const ejecutadas = DECISIONES.filter(
     (d) => enZona(d.comercioId) && d.apruebaRol === "gerente" && ["aprobada", "ejecutada", "medida"].includes(estadoDe(d, estados))
   ).slice(0, 5);
@@ -34,7 +127,7 @@ export function GerenteBandeja() {
 
   return (
     <div>
-      <PageTitle sub="Lo que espera tu aprobación, lo que ya se ejecutó y lo que quedó trabado en tu zona.">Bandeja</PageTitle>
+      <PageTitle sub="Lo que espera tu aprobación, el seguimiento de lo que decidiste y lo que quedó trabado en tu zona.">Bandeja</PageTitle>
 
       <div className="mb-8 grid grid-cols-3 gap-3">
         <StatTile value={stats.esperan} label="esperan tu aprobación" tono={stats.esperan > 0 ? "warn" : "ok"} />
@@ -52,11 +145,40 @@ export function GerenteBandeja() {
       ) : null}
 
       <section className="mb-8">
-        <h2 className="mb-3 text-sm font-semibold text-ink">Espera tu aprobación</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ink">Espera tu aprobación</h2>
+          {inbox.length > 0 ? <span className="text-xs text-muted">mostrando {inboxF.length} de {inbox.length}</span> : null}
+        </div>
+
+        {inbox.length > 0 ? (
+          <div className="mb-4 flex flex-wrap items-center gap-1.5">
+            <Chip active={origenF === "todo"} onClick={() => setOrigenF("todo")}>Todo</Chip>
+            <Chip active={origenF === "sistema"} onClick={() => setOrigenF("sistema")}>Del sistema</Chip>
+            <Chip active={origenF === "gerente"} onClick={() => setOrigenF("gerente")}>Mis pedidos</Chip>
+            <span className="mx-1 h-5 w-px bg-line" />
+            <Chip active={lineaF === "todo"} onClick={() => setLineaF("todo")}>Todas</Chip>
+            {LINEAS_F.map((l) => (
+              <Chip key={l} active={lineaF === l} onClick={() => setLineaF(l)}>{LINEA_LABEL[l]}</Chip>
+            ))}
+          </div>
+        ) : null}
+
         {inbox.length === 0 ? (
           <Card className="p-5"><Note>Nada pendiente en {zona === "norte" ? "Norte GBA" : "tu zona"}. Probá aprobar desde otro rol y volvé.</Note></Card>
+        ) : inboxF.length === 0 ? (
+          <Card className="p-5"><Note>Ningún caso con esos filtros. Tocá &quot;Todo&quot; / &quot;Todas&quot; para ver todo.</Note></Card>
         ) : (
-          <div className="space-y-3">{inbox.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
+          <div className="space-y-3">{inboxF.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
+        )}
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-1 text-sm font-semibold text-ink">Seguimiento de lo que decidiste</h2>
+        <p className="mb-3 text-xs text-muted">Qué pasó con cada cosa que aprobaste, rechazaste o mandaste a foto.</p>
+        {seguimiento.length === 0 ? (
+          <Card className="p-5"><Note>Todavía no decidiste nada en esta sesión. Cuando apruebes, rechaces o pidas una foto arriba, acá vas a ver a qué preventista le llegó la tarea y en qué estado está.</Note></Card>
+        ) : (
+          <div className="space-y-3">{seguimiento.map((r) => <SeguimientoCard key={r.decisionId} r={r} />)}</div>
         )}
       </section>
 
@@ -81,7 +203,7 @@ export function GerenteBandeja() {
 
       {ejecutadas.length > 0 ? (
         <section>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Aprobado y ejecutado</h2>
+          <h2 className="mb-3 text-sm font-semibold text-ink">Ya ejecutado en tu zona</h2>
           <Card className="divide-y divide-line">
             {ejecutadas.map((d) => {
               const c = getComercio(d.comercioId);
