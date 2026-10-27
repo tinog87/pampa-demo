@@ -1,8 +1,8 @@
 import type { Regla } from "../types";
 
-// Las reglas son texto con parámetros y número de versión.
-// Una versión no se modifica: un cambio crea la siguiente, pasa por prueba
-// contra el año anterior y se activa con la aprobación de quien la define.
+// Reglas con parámetros y versiones. Una "En prueba" corre sin efecto: no genera
+// propuestas, solo muestra cuántos casos habría marcado contra el año anterior.
+// Solo las "Activas" proponen. Los parámetros son criterios de Pampa (A definir).
 
 export const REGLAS: Regla[] = [
   {
@@ -30,7 +30,7 @@ export const REGLAS: Regla[] = [
         condicion: "compra contra parecidos menor a 0,5, en los últimos 4 meses",
         necesita: "una foto de la heladera",
         seConfirma: "si se ve llena de producto Pampa",
-        excepcion: "zona con competencia activa → va al supervisor",
+        excepcion: "zona con competencia activa → va al gerente",
         propone: "mover",
         params: { umbral_compra: 0.5, ventana_meses: 4, fotos_necesarias: 1 },
         cambio:
@@ -42,16 +42,15 @@ export const REGLAS: Regla[] = [
         fecha: "2026-10-06",
         define: "Gerente de zona",
         condicion:
-          "compra contra parecidos menor a 0,5, en los últimos 4 meses, y pide menos de 3 de cada 4 parecidos",
-        necesita: "foto de la heladera en 2 visitas",
+          "compra contra parecidos menor a 0,5, llena de producto Pampa en 2 visitas y casi sin reposición",
+        necesita: "foto de la heladera en 2 visitas seguidas",
         seConfirma: "si se ve llena de producto Pampa en las 2",
-        excepcion: "zona con competencia activa → va al supervisor",
+        excepcion: "zona con competencia activa → va al gerente",
         propone: "mover",
         params: {
           umbral_compra: 0.5,
           ventana_meses: 4,
           fotos_necesarias: 2,
-          cobertura_parecidos: 0.75,
         },
         cambio:
           "Pasó de 1 foto a 2 visitas: con una sola foto se movieron 3 heladeras que en la segunda visita sí tenían reposición. La doble foto evita el falso positivo.",
@@ -83,35 +82,20 @@ export const REGLAS: Regla[] = [
     id: "acuerdo_cumplimiento",
     nombre: "Acuerdo de exhibición incumplido",
     descripcion:
-      "Compara lo pactado en el contrato contra lo que muestra la foto de la visita.",
+      "Compara lo pactado en el contrato contra lo que muestra la foto de la visita. Solo en zonas piloto.",
     versions: [
       {
         version: 1,
-        fecha: "2026-09-15",
-        define: "Trade",
-        condicion: "la foto muestra menos cabeceras o menos espacio que lo pactado",
-        necesita: "foto de la góndola en la visita",
-        seConfirma: "la IA marca el faltante; el supervisor valida si el monto es alto",
-        excepcion: "foto dudosa o zona con competencia activa → va al supervisor",
-        propone: "corregir",
-        params: { tolerancia_espacio: 0.1 },
-        cambio: undefined,
-        estado: "activa",
-      },
-      {
-        version: 2,
         fecha: "2026-10-09",
         define: "Trade",
         condicion:
           "la foto muestra menos cabeceras o menos espacio que lo pactado, con tolerancia 10%",
-        necesita: "foto de la góndola en la visita",
+        necesita: "foto de la góndola en la visita (solo piloto)",
         seConfirma:
           "alerta automática si la IA supera el umbral de precisión; si no, al supervisor",
         excepcion: "foto dudosa, monto alto o zona con competencia activa → al supervisor",
         propone: "corregir",
-        params: { tolerancia_espacio: 0.1, umbral_precision_ia: 0.9 },
-        cambio:
-          "Se agregó la alerta automática, condicionada a que la IA demuestre 90% de acierto sobre la muestra revisada del piloto.",
+        params: { tolerancia_espacio: 0.1, umbral_precision_ia: "A definir" },
         estado: "activa",
       },
     ],
@@ -124,7 +108,7 @@ export const REGLAS: Regla[] = [
     versions: [
       {
         version: 1,
-        fecha: "2026-10-01",
+        fecha: "2026-10-12",
         define: "Finanzas",
         condicion:
           "compra contra parecidos menor a 1,0 mientras tuvo descuento activo",
@@ -133,6 +117,7 @@ export const REGLAS: Regla[] = [
         excepcion: "descuento dado para frenar competencia → se registra el motivo",
         propone: "condicionar",
         params: { umbral_compra: 1.0 },
+        cambio: "Primera versión. Corre en prueba contra el año anterior antes de activarse.",
         estado: "en_prueba",
       },
     ],
@@ -146,4 +131,8 @@ export function getRegla(id: string): Regla | undefined {
 export function reglaVigente(id: string) {
   const r = getRegla(id);
   return r ? r.versions[r.versions.length - 1] : undefined;
+}
+
+export function reglaEstaActiva(id: string): boolean {
+  return reglaVigente(id)?.estado === "activa";
 }

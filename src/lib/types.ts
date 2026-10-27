@@ -1,10 +1,10 @@
-// Modelo de datos de la demo.
-// Espeja las 5 tablas clave del documento técnico:
-// comercio · inversion · presupuesto_detalle (aquí: campos de inversion) · decision · regla · foto
+// Modelo de datos de la demo. Muestra ilustrativa de ~2.000 comercios.
+// Todos los totales de la app salen de esta muestra, nunca se mezclan con los 51,5 M.
 
 export type Confianza = "alta" | "media" | "baja";
 
-export type Canal = "almacen" | "kiosco" | "autoservicio" | "gastronomia";
+// "Tipo" de comercio (la columna se llama Tipo en la UI, no Canal).
+export type Tipo = "almacen" | "kiosco" | "autoservicio" | "gastronomia";
 export type Tamano = "chico" | "mediano" | "grande";
 
 export type Linea = "frio" | "descuentos" | "acuerdos" | "exhibicion";
@@ -29,7 +29,12 @@ export type EstadoDecision =
   | "medida"
   | "devuelta"
   | "rechazada"
-  | "proximo_ciclo";
+  | "proximo_ciclo"
+  | "pide_foto" // frío sin foto: no se propone acción hasta tenerla
+  | "a_validar"; // registro dudoso: una persona valida antes de proponer
+
+// Estado de un monto del presupuesto.
+export type EstadoMonto = "justificado" | "pendiente" | "a_validar" | "sin_justificar";
 
 export type Rol =
   | "preventista"
@@ -42,39 +47,68 @@ export type Rol =
 export type Zona = {
   id: string;
   nombre: string;
-  short: string; // abreviatura para el mapa
+  short: string;
   piloto: boolean;
   competenciaActiva: boolean;
-  mapX: number; // 0–100, oeste → este
-  mapY: number; // 0–100, norte → sur
+};
+
+export type EstadoHeladera =
+  | "llena_pampa"
+  | "vacia"
+  | "otra_marca"
+  | "rota"
+  | "sin_heladera";
+
+export type LecturaCampo = {
+  label: string;
+  valor: string;
+  confianza: Confianza;
+};
+
+export type FotoFrio = {
+  estado: EstadoHeladera;
+  visitas: number;
+  confianza: Confianza;
+  lectura: LecturaCampo[];
+};
+
+export type AcuerdoLinea = {
+  pactado: string;
+  foto: string;
+  cumple: boolean;
 };
 
 export type Inversion = {
   linea: Linea;
-  periodo: string;
-  montoActual: number; // USD / año, ciclo en curso
-  montoPropuesto: number; // USD / año, próximo ciclo
+  montoActual: number; // ciclo en curso
+  montoPropuesto: number; // próximo ciclo
   accion: Accion;
-  motivo: string | null; // null => "sin justificación": hallazgo, no tarea
-  justificado: boolean;
+  motivo: string | null; // null => sin justificación (hallazgo, no tarea)
+  condicion?: string; // para Condicionar (descuentos): siempre dice la condición
+  estadoMonto: EstadoMonto;
   confianza: Confianza;
+  estimado?: boolean; // costos marcados como estimados
 };
 
 export type Comercio = {
-  id: string; // slug
-  codigo: string; // código único cruzado entre fuentes
+  id: string;
+  codigo: string;
   nombre: string;
+  barrio: string; // desambigua nombres repetidos
   zonaId: string;
-  canal: Canal;
+  tipo: Tipo;
   tamano: Tamano;
-  puertas: number; // puertas de heladera (0 = sin heladera)
+  puertas: number; // 0 = sin heladera
   competenciaActiva: boolean;
-  confianza: Confianza; // confianza del dato del comercio
-  // Indicador central: compra del comercio dividida por la del comercio del medio de su grupo.
-  // 1 = igual que sus parecidos. <1 compra menos. >1 compra más. Es sell-in, no venta al consumidor.
+  confianza: Confianza;
+  // Compra contra parecidos (sell-in): 1 = igual al grupo. <1 compra menos, >1 más.
   compraVsParecidos: number;
   inversiones: Inversion[];
+  fotoFrio?: FotoFrio; // candidatas de frío (14 zonas)
+  acuerdo?: AcuerdoLinea[]; // control de exhibición (solo piloto)
 };
+
+export type OrigenDecision = "sistema" | "gerente";
 
 export type Decision = {
   id: string;
@@ -83,31 +117,33 @@ export type Decision = {
   accion: Accion;
   montoActual: number;
   montoPropuesto: number;
-  montoNeto: number; // propuesto - actual (negativo = libera plata)
+  montoNeto: number;
   motivo: string;
-  indicador: string; // la señal que la disparó
+  condicion?: string;
   reglaId: string;
   reglaVersion: number;
-  apruebaRol: Rol; // quién tiene que aprobar (o "auto")
-  auto: boolean; // monto bajo + confianza alta => automático
+  apruebaRol: Rol | "auto";
+  auto: boolean;
+  origen: OrigenDecision;
   estadoInicial: EstadoDecision;
   fechaLimite?: string;
   vencida?: boolean;
-  fotoId?: string;
+  tieneFoto: boolean;
   confianza: Confianza;
+  estimado?: boolean;
 };
 
 export type ReglaVersion = {
   version: number;
   fecha: string;
-  define: string; // rol que la define
+  define: string;
   condicion: string;
   necesita: string;
   seConfirma: string;
   excepcion: string;
   propone: Accion;
   params: Record<string, string | number>;
-  cambio?: string; // qué cambió respecto de la versión anterior
+  cambio?: string;
   estado: "activa" | "en_prueba" | "archivada";
 };
 
@@ -115,29 +151,7 @@ export type Regla = {
   id: string;
   nombre: string;
   descripcion: string;
-  versions: ReglaVersion[]; // la última es la vigente
-};
-
-export type LecturaCampo = {
-  label: string;
-  valor: string;
-  confianza: Confianza;
-};
-
-export type EstadoHeladera = "llena_pampa" | "vacia" | "otra_marca" | "rota" | "sin_heladera";
-
-export type AcuerdoLinea = {
-  pactado: string;
-  foto: string;
-  cumple: boolean;
-};
-
-export type Foto = {
-  id: string;
-  comercioId: string;
-  estadoHeladera: EstadoHeladera;
-  fecha: string;
-  visita: number;
-  lectura: LecturaCampo[];
-  acuerdo?: AcuerdoLinea[]; // verificación de exhibición pactada
+  // Si la vigente está "en_prueba": no propone, solo cuenta cuántos casos habría marcado.
+  habriaMarcado?: number;
+  versions: ReglaVersion[];
 };
