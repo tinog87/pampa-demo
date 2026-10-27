@@ -8,19 +8,20 @@ import {
   alertasDe,
   estadoDe,
   getComercio,
-  getDecision,
   inboxDe,
   preventistaDe,
   statsRol,
   zonaRollup,
 } from "@/lib/data";
 import { useApp } from "@/lib/store";
-import type { RegistroEntrada } from "@/lib/store";
-import { ACCION_LABEL, ESTADO_LABEL, LINEA_LABEL, TIPO_LABEL, cn, estadoTono, usd } from "@/lib/format";
+import { ACCION_LABEL, ESTADO_LABEL, LINEA_LABEL, TIPO_LABEL, cn, usd } from "@/lib/format";
 import type { Alerta } from "@/lib/data";
-import type { Accion, Linea } from "@/lib/types";
+import type { Tono } from "@/lib/format";
+import type { Accion, Decision, EstadoDecision, Linea } from "@/lib/types";
 import { Badge, Card, Note, PageTitle, StatTile } from "./ui";
 import { DecisionCard, EstadoMontoBar } from "./shared";
+
+const TOPE_COLUMNA = 30;
 
 type OrigenF = "todo" | "sistema" | "gerente";
 type LineaF = "todo" | Linea;
@@ -50,173 +51,197 @@ function ejecucionFrase(a: Accion): string {
   }
 }
 
-// Una decisión que el gerente tocó, con qué pasó después y a quién le llegó.
-function SeguimientoCard({ r }: { r: RegistroEntrada }) {
+// Columna del tablero: título, contador y las tarjetas (con tope para no explotar).
+function Columna({ titulo, items, tono, children }: { titulo: string; items: number; tono: Tono; children: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-panel p-3">
+      <div className="mb-3 flex items-center justify-between px-1">
+        <h3 className="text-xs font-semibold text-ink">{titulo}</h3>
+        <Badge tono={items > 0 ? tono : "neutro"}>{items}</Badge>
+      </div>
+      <div className="space-y-2.5">{children}</div>
+    </div>
+  );
+}
+
+function ColVacia({ children }: { children: ReactNode }) {
+  return <p className="px-1 py-2 text-xs text-faint">{children}</p>;
+}
+
+// Tarjeta compacta para lo que el gerente no resuelve él mismo (pide foto / a validar).
+function CardMini({ d }: { d: Decision }) {
+  const c = getComercio(d.comercioId);
+  return (
+    <Link href={`/comercio?id=${d.comercioId}`} className="block rounded-lg border border-line bg-paper p-3 hover:border-ink">
+      <div className="text-sm font-medium text-ink">{c?.nombre}</div>
+      <div className="mt-0.5 text-xs text-faint">{c?.barrio} · {ACCION_LABEL[d.accion]} {LINEA_LABEL[d.linea].toLowerCase()}</div>
+    </Link>
+  );
+}
+
+function quePaso(d: Decision, estado: EstadoDecision, prev: string): string {
+  switch (estado) {
+    case "aprobada": return `Tarea creada para ${prev}: ${ejecucionFrase(d.accion)}`;
+    case "ejecutada": return `${prev} la ejecutó en la visita`;
+    case "medida": return "Ejecutada y medida en el piloto";
+    case "rechazada": return "Rechazada — no se generó tarea";
+    case "devuelta": return `${prev} no la pudo hacer — vuelve a la cola`;
+    default: return ESTADO_LABEL[estado];
+  }
+}
+
+// Tarjeta de seguimiento: una tarea creada y qué está pasando con ella.
+function TareaSeguimientoCard({ d }: { d: Decision }) {
   const estados = useApp((s) => s.estados);
-  const d = getDecision(r.decisionId);
-  if (!d) return null;
+  const registro = useApp((s) => s.registro);
   const c = getComercio(d.comercioId);
   const prev = preventistaDe(d.comercioId);
-  const estadoActual = estadoDe(d, estados);
-
-  const accion =
-    r.a === "aprobada" ? "La aprobaste"
-    : r.a === "rechazada" ? "La rechazaste"
-    : r.a === "pide_foto" ? "Pediste una foto"
-    : r.a === "ejecutada" ? "La marcaste ejecutada"
-    : ESTADO_LABEL[r.a];
-
-  const disparo =
-    r.a === "aprobada" ? `Se generó la tarea para el preventista ${prev}: ${ejecucionFrase(d.accion)}.`
-    : r.a === "pide_foto" ? `Se generó la tarea de foto para el preventista ${prev}.`
-    : r.a === "rechazada" ? "No se genera tarea. El monto vuelve al presupuesto de la zona."
-    : null;
+  const estado = estadoDe(d, estados);
+  const miAccion = registro.find((r) => r.decisionId === d.id && r.por === "gerente");
 
   return (
-    <Card className="p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <Link href={`/comercio?id=${d.comercioId}`} className="text-sm font-semibold text-ink hover:underline">
-          {c?.nombre}
-        </Link>
-        <Badge tono={estadoTono(estadoActual)} dot>{ESTADO_LABEL[estadoActual]}</Badge>
+    <Card className="p-3.5">
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <Link href={`/comercio?id=${d.comercioId}`} className="text-sm font-semibold text-ink hover:underline">{c?.nombre}</Link>
+        {miAccion ? <span className="shrink-0 rounded bg-ink px-1.5 py-0.5 text-[10px] font-medium text-white">vos</span> : null}
       </div>
-      <ol className="space-y-1.5 border-l border-line pl-3 text-xs">
-        <li className="text-muted">
-          <span className="font-medium text-ink">{d.origen === "sistema" ? "El sistema lo propuso" : "Lo pediste vos"}</span>
-          {" · "}{ACCION_LABEL[d.accion]} {LINEA_LABEL[d.linea].toLowerCase()}
-        </li>
-        <li className="text-muted">
-          <span className="font-medium text-ink">{accion}</span> · {r.cuando}
-        </li>
-        {disparo ? <li className="text-ink-soft">↳ {disparo}</li> : null}
-      </ol>
+      <div className="mb-2 text-xs text-muted">
+        {d.origen === "sistema" ? "Sistema" : "Tu pedido"} · {ACCION_LABEL[d.accion]} {LINEA_LABEL[d.linea].toLowerCase()}
+      </div>
+      <p className="text-xs text-ink-soft">↳ {quePaso(d, estado, prev)}</p>
+      {miAccion ? <p className="mt-0.5 text-[11px] text-faint">La tocaste a las {miAccion.cuando}</p> : null}
     </Card>
   );
 }
 
 export function GerenteBandeja() {
-  const { zona, estados, registro } = useApp();
+  const { zona, estados } = useApp();
   const alertas = alertasDe("gerente", zona, estados);
   const inbox = inboxDe("gerente", zona, estados);
   const stats = statsRol("gerente", zona, estados);
 
   const [origenF, setOrigenF] = useState<OrigenF>("todo");
   const [lineaF, setLineaF] = useState<LineaF>("todo");
-  const inboxF = inbox.filter(
-    (d) => (origenF === "todo" || d.origen === origenF) && (lineaF === "todo" || d.linea === lineaF)
-  );
+  const pasa = (d: Decision) =>
+    (origenF === "todo" || d.origen === origenF) && (lineaF === "todo" || d.linea === lineaF);
 
   const enZona = (cid: string) => getComercio(cid)?.zonaId === zona;
-
-  // Seguimiento: lo que el gerente fue decidiendo (del registro vivo), 1 por decisión.
-  const vistos = new Set<string>();
-  const seguimiento: RegistroEntrada[] = [];
-  for (const r of registro) {
-    if (r.por === "gerente" && !vistos.has(r.decisionId)) {
-      vistos.add(r.decisionId);
-      seguimiento.push(r);
-    }
-  }
-
-  const ejecutadas = DECISIONES.filter(
-    (d) => enZona(d.comercioId) && d.apruebaRol === "gerente" && ["aprobada", "ejecutada", "medida"].includes(estadoDe(d, estados))
-  ).slice(0, 5);
-  const sinResolver = DECISIONES.filter(
-    (d) => enZona(d.comercioId) && ["pide_foto", "a_validar"].includes(estadoDe(d, estados))
-  ).slice(0, 6);
+  const paraAprobar = inbox.filter(pasa);
+  const pideFoto = DECISIONES.filter((d) => enZona(d.comercioId) && estadoDe(d, estados) === "pide_foto" && pasa(d));
+  const aValidar = DECISIONES.filter((d) => enZona(d.comercioId) && estadoDe(d, estados) === "a_validar" && pasa(d));
 
   return (
     <div>
-      <PageTitle sub="Lo que espera tu aprobación, el seguimiento de lo que decidiste y lo que quedó trabado en tu zona.">Bandeja</PageTitle>
+      <PageTitle sub="Tu tablero: lo que espera aprobación, lo que pide foto y lo que hay que validar en la zona.">Bandeja</PageTitle>
 
-      <div className="mb-8 grid grid-cols-3 gap-3">
+      <div className="mb-6 grid grid-cols-3 gap-3">
         <StatTile value={stats.esperan} label="esperan tu aprobación" tono={stats.esperan > 0 ? "warn" : "ok"} />
         <StatTile value={stats.aprobadas} label="aprobadas o ejecutadas" tono="ok" />
         <StatTile value={stats.vencidas} label="vencidas" tono={stats.vencidas > 0 ? "bad" : "neutro"} />
       </div>
 
       {alertas.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold text-ink">Alertas</h2>
+        <section className="mb-6">
           <div className="grid gap-3 sm:grid-cols-2">
             {alertas.map((a) => <AlertaCard key={a.id} a={a} />)}
           </div>
         </section>
       ) : null}
 
-      <section className="mb-8">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-ink">Espera tu aprobación</h2>
-          {inbox.length > 0 ? <span className="text-xs text-muted">mostrando {inboxF.length} de {inbox.length}</span> : null}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <Chip active={origenF === "todo"} onClick={() => setOrigenF("todo")}>Todo</Chip>
+        <Chip active={origenF === "sistema"} onClick={() => setOrigenF("sistema")}>Del sistema</Chip>
+        <Chip active={origenF === "gerente"} onClick={() => setOrigenF("gerente")}>Mis pedidos</Chip>
+        <span className="mx-1 h-5 w-px bg-line" />
+        <Chip active={lineaF === "todo"} onClick={() => setLineaF("todo")}>Todas</Chip>
+        {LINEAS_F.map((l) => (
+          <Chip key={l} active={lineaF === l} onClick={() => setLineaF(l)}>{LINEA_LABEL[l]}</Chip>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Columna titulo="Para aprobar" items={paraAprobar.length} tono="warn">
+          {paraAprobar.length === 0 ? (
+            <ColVacia>Nada para aprobar con estos filtros.</ColVacia>
+          ) : (
+            <>
+              {paraAprobar.slice(0, TOPE_COLUMNA).map((d) => <DecisionCard key={d.id} d={d} />)}
+              {paraAprobar.length > TOPE_COLUMNA ? <ColVacia>+ {paraAprobar.length - TOPE_COLUMNA} más</ColVacia> : null}
+            </>
+          )}
+        </Columna>
+
+        <Columna titulo="Pide foto" items={pideFoto.length} tono="bad">
+          {pideFoto.length === 0 ? (
+            <ColVacia>Sin fotos pendientes.</ColVacia>
+          ) : (
+            <>
+              {pideFoto.slice(0, TOPE_COLUMNA).map((d) => <CardMini key={d.id} d={d} />)}
+              {pideFoto.length > TOPE_COLUMNA ? <ColVacia>+ {pideFoto.length - TOPE_COLUMNA} más</ColVacia> : null}
+            </>
+          )}
+        </Columna>
+
+        <Columna titulo="A validar" items={aValidar.length} tono="warn">
+          {aValidar.length === 0 ? (
+            <ColVacia>Nada para validar.</ColVacia>
+          ) : (
+            <>
+              {aValidar.slice(0, TOPE_COLUMNA).map((d) => <CardMini key={d.id} d={d} />)}
+              {aValidar.length > TOPE_COLUMNA ? <ColVacia>+ {aValidar.length - TOPE_COLUMNA} más</ColVacia> : null}
+            </>
+          )}
+        </Columna>
+      </div>
+
+      <Note>
+        Lo que apruebes pasa a <Link href="/seguimiento" className="font-medium text-ink underline underline-offset-2">Seguimiento</Link>, donde ves en qué estado va cada tarea.
+      </Note>
+    </div>
+  );
+}
+
+export function GerenteSeguimiento() {
+  const { zona, estados } = useApp();
+  const enZona = (cid: string) => getComercio(cid)?.zonaId === zona;
+  const mias = DECISIONES.filter((d) => enZona(d.comercioId) && d.apruebaRol === "gerente");
+  const en = (sts: EstadoDecision[]) => mias.filter((d) => sts.includes(estadoDe(d, estados)));
+
+  const aprobadas = en(["aprobada"]);
+  const ejecutadas = en(["ejecutada"]);
+  const medidas = en(["medida"]);
+  const noProspero = en(["rechazada", "devuelta"]);
+  const total = aprobadas.length + ejecutadas.length + medidas.length + noProspero.length;
+
+  const cards = (ds: Decision[]) => ds.slice(0, TOPE_COLUMNA).map((d) => <TareaSeguimientoCard key={d.id} d={d} />);
+
+  return (
+    <div>
+      <PageTitle sub="Las tareas que se crearon a partir de lo que aprobaste, y en qué estado va cada una.">Seguimiento</PageTitle>
+
+      {total === 0 ? (
+        <Card className="p-5">
+          <Note>
+            Todavía no hay tareas creadas en tu zona. Aprobá algo en la{" "}
+            <Link href="/" className="font-medium text-ink underline underline-offset-2">Bandeja</Link> y seguilo acá: vas a ver a qué preventista le llegó y cómo avanza.
+          </Note>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Columna titulo="Aprobada · tarea creada" items={aprobadas.length} tono="warn">
+            {aprobadas.length === 0 ? <ColVacia>—</ColVacia> : cards(aprobadas)}
+          </Columna>
+          <Columna titulo="Ejecutada" items={ejecutadas.length} tono="ok">
+            {ejecutadas.length === 0 ? <ColVacia>—</ColVacia> : cards(ejecutadas)}
+          </Columna>
+          <Columna titulo="Medida (piloto)" items={medidas.length} tono="ok">
+            {medidas.length === 0 ? <ColVacia>—</ColVacia> : cards(medidas)}
+          </Columna>
+          <Columna titulo="No prosperó" items={noProspero.length} tono="bad">
+            {noProspero.length === 0 ? <ColVacia>—</ColVacia> : cards(noProspero)}
+          </Columna>
         </div>
-
-        {inbox.length > 0 ? (
-          <div className="mb-4 flex flex-wrap items-center gap-1.5">
-            <Chip active={origenF === "todo"} onClick={() => setOrigenF("todo")}>Todo</Chip>
-            <Chip active={origenF === "sistema"} onClick={() => setOrigenF("sistema")}>Del sistema</Chip>
-            <Chip active={origenF === "gerente"} onClick={() => setOrigenF("gerente")}>Mis pedidos</Chip>
-            <span className="mx-1 h-5 w-px bg-line" />
-            <Chip active={lineaF === "todo"} onClick={() => setLineaF("todo")}>Todas</Chip>
-            {LINEAS_F.map((l) => (
-              <Chip key={l} active={lineaF === l} onClick={() => setLineaF(l)}>{LINEA_LABEL[l]}</Chip>
-            ))}
-          </div>
-        ) : null}
-
-        {inbox.length === 0 ? (
-          <Card className="p-5"><Note>Nada pendiente en {zona === "norte" ? "Norte GBA" : "tu zona"}. Probá aprobar desde otro rol y volvé.</Note></Card>
-        ) : inboxF.length === 0 ? (
-          <Card className="p-5"><Note>Ningún caso con esos filtros. Tocá &quot;Todo&quot; / &quot;Todas&quot; para ver todo.</Note></Card>
-        ) : (
-          <div className="space-y-3">{inboxF.map((d) => <DecisionCard key={d.id} d={d} />)}</div>
-        )}
-      </section>
-
-      <section className="mb-8">
-        <h2 className="mb-1 text-sm font-semibold text-ink">Seguimiento de lo que decidiste</h2>
-        <p className="mb-3 text-xs text-muted">Qué pasó con cada cosa que aprobaste, rechazaste o mandaste a foto.</p>
-        {seguimiento.length === 0 ? (
-          <Card className="p-5"><Note>Todavía no decidiste nada en esta sesión. Cuando apruebes, rechaces o pidas una foto arriba, acá vas a ver a qué preventista le llegó la tarea y en qué estado está.</Note></Card>
-        ) : (
-          <div className="space-y-3">{seguimiento.map((r) => <SeguimientoCard key={r.decisionId} r={r} />)}</div>
-        )}
-      </section>
-
-      {sinResolver.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="mb-3 text-sm font-semibold text-ink">Sin resolver</h2>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {sinResolver.map((d) => {
-              const c = getComercio(d.comercioId);
-              return (
-                <Link key={d.id} href={`/comercio?id=${d.comercioId}`} className="flex items-center justify-between rounded-lg border border-line bg-paper px-4 py-2.5 hover:border-ink">
-                  <span className="text-sm font-medium text-ink">{c?.nombre}</span>
-                  <Badge tono={estadoDe(d, estados) === "pide_foto" ? "bad" : "warn"} dot>
-                    {estadoDe(d, estados) === "pide_foto" ? "Pide foto" : "A validar"}
-                  </Badge>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {ejecutadas.length > 0 ? (
-        <section>
-          <h2 className="mb-3 text-sm font-semibold text-ink">Ya ejecutado en tu zona</h2>
-          <Card className="divide-y divide-line">
-            {ejecutadas.map((d) => {
-              const c = getComercio(d.comercioId);
-              return (
-                <div key={d.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                  <Link href={`/comercio?id=${d.comercioId}`} className="font-medium text-ink hover:underline">{c?.nombre}</Link>
-                  <span className="text-muted">{ACCION_LABEL[d.accion]} · {LINEA_LABEL[d.linea]}</span>
-                </div>
-              );
-            })}
-          </Card>
-        </section>
-      ) : null}
+      )}
     </div>
   );
 }

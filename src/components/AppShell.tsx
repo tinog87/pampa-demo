@@ -22,6 +22,7 @@ const NAV: Record<Rol, NavItem[]> = {
   ],
   gerente: [
     { href: "/", label: "Bandeja" },
+    { href: "/seguimiento", label: "Seguimiento" },
     { href: "/mi-zona", label: "Mi zona" },
     { href: "/comercios", label: "Comercios" },
   ],
