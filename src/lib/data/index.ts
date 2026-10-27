@@ -5,9 +5,11 @@ import type {
   Inversion,
   Linea,
   Rol,
+  Zona,
 } from "../types";
 import { COMERCIOS, FOTOS, ZONAS, getComercio, getFotoByComercio, getZona } from "./comercios";
-import { LINEA_ORDER } from "../format";
+import { REGLAS } from "./reglas";
+import { LINEA_ORDER, usdFull } from "../format";
 
 export { COMERCIOS, FOTOS, ZONAS, getComercio, getFotoByComercio, getZona };
 export { REGLAS, getRegla, reglaVigente } from "./reglas";
@@ -229,6 +231,230 @@ export function statsRol(rol: Rol, estados: Record<string, EstadoDecision>) {
     aprobadas: propias.filter((d) => ["aprobada", "ejecutada", "medida"].includes(estadoDe(d))).length,
     vencidas: propias.filter((d) => d.vencida && estadoDe(d) === "esperando").length,
   };
+}
+
+// ----------------------------------------------------------------------------
+// Alertas: lo que el sistema empuja hacia la persona, por rol.
+// Es lo que separa esto de un tablero: no espera que vayas a buscar, te avisa.
+// ----------------------------------------------------------------------------
+
+export type Alerta = {
+  id: string;
+  tono: "bad" | "warn" | "ok" | "neutro";
+  categoria: string;
+  titulo: string;
+  detalle: string;
+  href?: string;
+  cta?: string;
+};
+
+function misDecisiones(rol: Rol): Decision[] {
+  if (rol === "finanzas" || rol === "direccion") return DECISIONES;
+  if (rol === "preventista")
+    return DECISIONES.filter((d) => d.estadoInicial === "devuelta" || d.accion === "corregir");
+  if (rol === "trade") return DECISIONES.filter((d) => d.accion === "derivar");
+  return DECISIONES.filter((d) => d.apruebaRol === rol);
+}
+
+export function alertasDe(rol: Rol, estados: Record<string, EstadoDecision>): Alerta[] {
+  const est = (d: Decision) => estados[d.id] ?? d.estadoInicial;
+  const mias = misDecisiones(rol);
+  const alertas: Alerta[] = [];
+
+  // 1. Tareas vencidas
+  const vencidas = mias.filter((d) => d.vencida && est(d) === "esperando");
+  if (vencidas.length > 0) {
+    const c0 = getComercio(vencidas[0].comercioId);
+    alertas.push({
+      id: "vencidas",
+      tono: "bad",
+      categoria: "Vencida",
+      titulo: `${vencidas.length} tarea${vencidas.length > 1 ? "s" : ""} vencida${vencidas.length > 1 ? "s" : ""}`,
+      detalle: `Pasaron su fecha límite y siguen esperando. Empezá por ${c0?.nombre ?? "la primera"}.`,
+      href: `/comercio/${vencidas[0].comercioId}`,
+      cta: "Resolver",
+    });
+  }
+
+  // 2. Finanzas: inversión sin justificación
+  if (["finanzas", "direccion", "gerente"].includes(rol)) {
+    const sinJust = COMERCIOS.flatMap((c) => c.inversiones.filter((i) => !i.justificado));
+    const monto = sum(sinJust.map((i) => i.montoActual));
+    if (sinJust.length > 0) {
+      alertas.push({
+        id: "sin-justificar",
+        tono: "warn",
+        categoria: "Finanzas",
+        titulo: `${usdFull(monto)} sin justificación`,
+        detalle: `${sinJust.length} inversiones sin motivo ni decisión registrada. Es un hallazgo, no una tarea: quedan marcadas en el presupuesto.`,
+        href: "/presupuesto",
+        cta: "Ver en presupuesto",
+      });
+    }
+  }
+
+  // 3. Dato dudoso → pedido de foto
+  const dudosas = mias.filter((d) => est(d) === "devuelta");
+  if (dudosas.length > 0 && ["preventista", "supervisor", "gerente"].includes(rol)) {
+    alertas.push({
+      id: "dudosas",
+      tono: "warn",
+      categoria: "Dato dudoso",
+      titulo: `${dudosas.length} heladera${dudosas.length > 1 ? "s" : ""} con dato dudoso`,
+      detalle:
+        "Confianza baja: el sistema no propone nada hasta tener foto. Vuelven como pedido de foto en la visita.",
+      href: `/comercio/${dudosas[0].comercioId}`,
+      cta: "Ver",
+    });
+  }
+
+  // 4. Competencia activa: frío frenado hasta revisión
+  if (["gerente", "supervisor", "direccion"].includes(rol)) {
+    const comp = DECISIONES.filter((d) => {
+      const c = getComercio(d.comercioId);
+      return c?.competenciaActiva && d.accion === "mover" && est(d) === "esperando";
+    });
+    if (comp.length > 0) {
+      alertas.push({
+        id: "competencia",
+        tono: "neutro",
+        categoria: "Competencia",
+        titulo: `${comp.length} freno${comp.length > 1 ? "s" : ""} por competencia activa`,
+        detalle:
+          "Estas heladeras candidatas a mover quedaron frenadas: en zona con competencia no se retira frío sin tu revisión.",
+        href: `/comercio/${comp[0].comercioId}`,
+        cta: "Revisar",
+      });
+    }
+  }
+
+  // 5. Regla en prueba
+  if (["finanzas", "trade", "direccion"].includes(rol)) {
+    const enPrueba = REGLAS.filter(
+      (r) => r.versions[r.versions.length - 1].estado === "en_prueba"
+    );
+    if (enPrueba.length > 0) {
+      alertas.push({
+        id: "regla-prueba",
+        tono: "neutro",
+        categoria: "Regla",
+        titulo: `${enPrueba.length} regla en prueba`,
+        detalle: `"${enPrueba[0].nombre}" se prueba contra el año anterior. Se activa cuando la validás.`,
+        href: "/reglas",
+        cta: "Ver regla",
+      });
+    }
+  }
+
+  // 6. Todo al día
+  if (alertas.length === 0) {
+    alertas.push({
+      id: "al-dia",
+      tono: "ok",
+      categoria: "Al día",
+      titulo: "Nada urgente para tu rol",
+      detalle: "No hay vencidas ni hallazgos pendientes. Revisá la bandeja o el presupuesto.",
+      href: "/presupuesto",
+      cta: "Ver presupuesto",
+    });
+  }
+
+  return alertas;
+}
+
+// Actividad base del sistema (se combina con el registro en vivo de las acciones).
+export type ActividadItem = {
+  id: string;
+  tono: "ok" | "warn" | "neutro" | "ink";
+  texto: string;
+  detalle: string;
+  cuando: string;
+};
+
+export function actividadBase(): ActividadItem[] {
+  const autos = DECISIONES.filter((d) => d.auto).slice(0, 3);
+  const propuestas = DECISIONES.filter((d) => d.estadoInicial === "esperando").slice(0, 4);
+  const items: ActividadItem[] = [];
+
+  autos.forEach((d, i) => {
+    const c = getComercio(d.comercioId);
+    items.push({
+      id: `auto-${d.id}`,
+      tono: "ok",
+      texto: `Aprobada automática · ${c?.nombre ?? d.comercioId}`,
+      detalle: "Monto bajo, dato claro. Quedó registrada sin intervención.",
+      cuando: `hoy ${String(8 + (i % 3)).padStart(2, "0")}:${String(12 + i * 7).padStart(2, "0")}`,
+    });
+  });
+
+  propuestas.forEach((d, i) => {
+    const c = getComercio(d.comercioId);
+    items.push({
+      id: `prop-${d.id}`,
+      tono: "neutro",
+      texto: `Propuesta ${d.accion} · ${c?.nombre ?? d.comercioId}`,
+      detalle: `Creada por el sistema${d.reglaId ? ` con ${d.reglaId} v${d.reglaVersion}` : ""}.`,
+      cuando: `ayer ${String(15 + (i % 4)).padStart(2, "0")}:${String(5 + i * 9).padStart(2, "0")}`,
+    });
+  });
+
+  return items;
+}
+
+// ----------------------------------------------------------------------------
+// Métricas por zona (para el mapa) y zonas parecidas.
+// ----------------------------------------------------------------------------
+
+export type ZonaMetrica = {
+  zona: Zona;
+  montoActual: number;
+  justificadoPct: number;
+  comercios: number;
+  bajoRetornoPct: number; // share de comercios que compran < 60% de sus parecidos
+  vencidas: number;
+};
+
+export function zonasConMetricas(): ZonaMetrica[] {
+  const roll = presupuestoPorZona();
+  return ZONAS.map((z) => {
+    const r = roll.find((x) => x.zonaId === z.id)!;
+    const comercios = COMERCIOS.filter((c) => c.zonaId === z.id);
+    const bajo = comercios.filter((c) => c.compraVsParecidos < 0.6).length;
+    const vencidas = DECISIONES.filter((d) => {
+      const c = getComercio(d.comercioId);
+      return c?.zonaId === z.id && d.vencida && d.estadoInicial === "esperando";
+    }).length;
+    return {
+      zona: z,
+      montoActual: r.montoActual,
+      justificadoPct: r.montoActual > 0 ? r.justificado / r.montoActual : 0,
+      comercios: comercios.length,
+      bajoRetornoPct: comercios.length ? bajo / comercios.length : 0,
+      vencidas,
+    };
+  });
+}
+
+export function zonaMetrica(id: string): ZonaMetrica | undefined {
+  return zonasConMetricas().find((m) => m.zona.id === id);
+}
+
+// Zonas más parecidas por perfil: share de bajo retorno + tamaño del parque.
+export function zonasParecidas(id: string, n = 3): ZonaMetrica[] {
+  const all = zonasConMetricas();
+  const self = all.find((m) => m.zona.id === id);
+  if (!self) return [];
+  return all
+    .filter((m) => m.zona.id !== id)
+    .map((m) => ({
+      m,
+      dist:
+        Math.abs(m.bajoRetornoPct - self.bajoRetornoPct) +
+        Math.abs(m.comercios - self.comercios) / 40,
+    }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, n)
+    .map((x) => x.m);
 }
 
 function sum(xs: number[]): number {

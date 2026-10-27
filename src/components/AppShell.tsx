@@ -9,8 +9,9 @@ import type { Rol } from "@/lib/types";
 import { cn } from "@/lib/format";
 
 const NAV: Array<{ href: string; label: string; icon: ReactNode }> = [
-  { href: "/", label: "Presupuesto", icon: <IconBudget /> },
-  { href: "/bandeja", label: "Bandeja", icon: <IconInbox /> },
+  { href: "/", label: "Bandeja", icon: <IconInbox /> },
+  { href: "/zonas", label: "Mapa", icon: <IconMap /> },
+  { href: "/presupuesto", label: "Presupuesto", icon: <IconBudget /> },
   { href: "/reglas", label: "Reglas", icon: <IconRules /> },
   { href: "/foto", label: "Fotos", icon: <IconPhoto /> },
 ];
@@ -55,8 +56,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           {NAV.map((item) => {
             const active =
               item.href === "/"
-                ? pathname === "/" || pathname.startsWith("/comercio")
-                : pathname.startsWith(item.href);
+                ? pathname === "/"
+                : item.href === "/zonas"
+                  ? pathname.startsWith("/zonas") || pathname.startsWith("/zona/")
+                  : item.href === "/presupuesto"
+                    ? pathname.startsWith("/presupuesto") || pathname.startsWith("/comercio")
+                    : pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -144,6 +149,13 @@ function IconPhoto() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
       <path d="M2 4.5h2l1-1.3h6l1 1.3h2v8H2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
       <circle cx="8" cy="8.3" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+function IconMap() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M6 2.5 2.5 4v9.5L6 12l4 1.5 3.5-1.5V2.5L10 4 6 2.5zM6 2.5V12M10 4v9.5" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
     </svg>
   );
 }

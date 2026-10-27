@@ -41,9 +41,10 @@ cada persona ve y puede decidir.
 
 | Pantalla | Qué muestra |
 | --- | --- |
-| **Presupuesto** | El contexto nacional (USD 51,5 M), los indicadores del ciclo y el presupuesto por zona → línea → comercio. Cada comercio es clickeable. |
+| **Bandeja** (inicio) | Lo que el sistema empuja hacia el rol activo: **alertas** (vencidas, Finanzas sin justificación, dato dudoso, competencia, reglas en prueba), lo que **te toca decidir** (aprobar / pedir foto / rechazar, en vivo) y la **actividad reciente**. Lo que hacés aparece arriba al instante. |
+| **Mapa** | Las 14 zonas por share de bajo retorno. Clic en una zona → sus comercios, su inversión por línea y sus **zonas parecidas** para comparar. |
+| **Presupuesto** | El contexto nacional (USD 51,5 M), los indicadores del ciclo y el presupuesto por zona → línea → comercio. |
 | **Comercio** (clic en una fila) | La **cadena de trazabilidad**: presupuesto → inversión → compra vs parecidos → foto → decisión → aprobación → resultado. El doble click del sistema. |
-| **Bandeja** | Lo que le toca aprobar al rol activo. Aprobar / pedir foto / rechazar actualiza los contadores en vivo. |
 | **Reglas** | Las reglas como texto con parámetros y **versiones**, con su historial y qué cambió en cada una. |
 | **Fotos** | La lectura de IA de la foto de la visita y la verificación de acuerdos de exhibición (lo pactado vs la foto). |
 

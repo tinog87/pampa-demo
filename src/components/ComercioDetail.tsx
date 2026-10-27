@@ -35,7 +35,7 @@ export function ComercioDetail({ id }: { id: string }) {
   if (!c) {
     return (
       <div>
-        <Link href="/" className="text-sm text-muted hover:text-ink">
+        <Link href="/presupuesto" className="text-sm text-muted hover:text-ink">
           ← Presupuesto
         </Link>
         <p className="mt-6 text-sm text-muted">No se encontró el comercio.</p>
@@ -60,7 +60,7 @@ export function ComercioDetail({ id }: { id: string }) {
 
   return (
     <div>
-      <Link href="/" className="text-sm text-muted hover:text-ink">
+      <Link href="/presupuesto" className="text-sm text-muted hover:text-ink">
         ← Presupuesto
       </Link>
 

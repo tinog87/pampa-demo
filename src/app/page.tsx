@@ -1,267 +1,234 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
-  CONTEXTO_NACIONAL,
   DECISIONES,
-  decisionesDeComercio,
-  presupuestoPorZona,
+  actividadBase,
+  alertasDe,
+  getComercio,
+  inboxDe,
   totalesDemo,
+  type Alerta,
 } from "@/lib/data";
 import { useApp, estadoEfectivo } from "@/lib/store";
 import {
-  CANAL_LABEL,
+  ACCION_LABEL,
+  ESTADO_LABEL,
   LINEA_LABEL,
+  ROL_LABEL,
   cn,
-  compraTexto,
-  millones,
-  pct,
+  usd,
   usdFull,
 } from "@/lib/format";
-import type { Comercio, EstadoDecision } from "@/lib/types";
-import { Badge, Bar, Card, Note, PageTitle, SectionTitle, StatTile } from "@/components/ui";
+import type { Decision } from "@/lib/types";
+import { Badge, Card, Note, PageTitle, StatTile } from "@/components/ui";
+import { DecisionActions } from "@/components/DecisionActions";
 
-export default function PresupuestoPage() {
+export default function BandejaPage() {
+  const rol = useApp((s) => s.rol);
   const estados = useApp((s) => s.estados);
-  const zonas = presupuestoPorZona();
-  const totales = totalesDemo();
+  const registro = useApp((s) => s.registro);
 
-  const esperan = DECISIONES.filter(
-    (d) => estadoEfectivo(estados, d.id, d.estadoInicial) === "esperando"
-  ).length;
-  const ejecutadas = DECISIONES.filter((d) =>
-    ["aprobada", "ejecutada", "medida"].includes(
-      estadoEfectivo(estados, d.id, d.estadoInicial)
-    )
-  ).length;
-  const vencidas = DECISIONES.filter(
-    (d) => d.vencida && estadoEfectivo(estados, d.id, d.estadoInicial) === "esperando"
-  ).length;
+  const est = (d: Decision) => estadoEfectivo(estados, d.id, d.estadoInicial);
+  const alertas = alertasDe(rol, estados);
+  const inbox = inboxDe(rol, estados);
+  const { sinJustificar } = totalesDemo();
 
-  const maxLinea = Math.max(...CONTEXTO_NACIONAL.lineas.map((l) => l.monto));
+  const aceptadas = DECISIONES.filter((d) =>
+    ["aprobada", "ejecutada", "medida"].includes(est(d))
+  ).length;
+  const vencidas = DECISIONES.filter((d) => d.vencida && est(d) === "esperando").length;
+
+  const esVista = rol === "finanzas" || rol === "direccion";
 
   return (
     <div>
-      <PageTitle
-        sub="El presupuesto del próximo ciclo, por zona y por línea. Desde cualquier número se baja al comercio, a la regla que lo decidió y a la foto que lo sostiene."
-      >
-        Cada peso trazado
+      <PageTitle sub={`Lo que el sistema necesita de ${ROL_LABEL[rol]} ahora: alertas, decisiones por tomar y lo que ya pasó. Se arma solo con tu rol y tu zona.`}>
+        Bandeja de entrada
       </PageTitle>
 
-      {/* Contexto nacional */}
-      <Card className="mb-8 p-5">
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-          <SectionTitle>Contexto Pampa · canal tradicional</SectionTitle>
-          <span className="text-sm font-semibold text-ink tnum">
-            {millones(CONTEXTO_NACIONAL.total)} / año
+      {/* Tiles */}
+      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile value={inbox.length} label="te toca ahora" tono={inbox.length > 0 ? "warn" : "ok"} />
+        <StatTile value={aceptadas} label="aceptadas en el ciclo" tono="ok" />
+        <StatTile value={vencidas} label="tareas vencidas" tono={vencidas > 0 ? "bad" : "neutro"} />
+        <StatTile value={usd(sinJustificar)} label="sin justificación · Finanzas" tono="warn" />
+      </div>
+
+      {/* Alertas */}
+      <section className="mb-10">
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-ink">Alertas</h2>
+          <span className="rounded-full bg-card px-2 py-0.5 text-xs text-muted">
+            {alertas.length}
           </span>
         </div>
-        <div className="grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
-          {CONTEXTO_NACIONAL.lineas.map((l) => (
-            <div key={l.linea} className="flex items-center gap-3">
-              <span className="w-40 shrink-0 text-sm text-ink-soft">
-                {LINEA_LABEL[l.linea]}
-              </span>
-              <Bar value={l.monto} max={maxLinea} />
-              <span className="w-16 shrink-0 text-right text-sm font-medium text-ink tnum">
-                {millones(l.monto)}
-              </span>
-            </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {alertas.map((a) => (
+            <AlertaCard key={a.id} a={a} />
           ))}
         </div>
-        <div className="mt-4 border-t border-line pt-3">
-          <Note>
-            Pampa estima que entre el 25% y el 35% está en comercios de bajo o nulo
-            retorno: {millones(CONTEXTO_NACIONAL.malAsignadoMin)} a{" "}
-            {millones(CONTEXTO_NACIONAL.malAsignadoMax)} por año. No es un ahorro
-            prometido: es lo que el sistema baja a comercio para decidir qué se recupera.
-          </Note>
-        </div>
-      </Card>
+      </section>
 
-      {/* Tiles del sistema */}
-      <div className="mb-10 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile value={esperan} label="decisiones esperan aprobación" tono="warn" />
-        <StatTile value={ejecutadas} label="aprobadas o ejecutadas" tono="ok" />
-        <StatTile value={vencidas} label="tareas vencidas" tono={vencidas > 0 ? "bad" : "neutro"} />
-        <StatTile value={pct(totales.pctJustificado)} label="del monto, justificado" />
-      </div>
+      {/* Te toca decidir */}
+      <section className="mb-10">
+        <h2 className="mb-3 text-sm font-semibold text-ink">
+          {esVista ? "Qué mirar" : "Te toca decidir"}
+        </h2>
 
-      {/* Presupuesto por zona */}
-      <div className="mb-3 flex items-center justify-between">
-        <SectionTitle>Presupuesto por zona</SectionTitle>
-        <span className="text-xs text-muted">
-          {totales.comercios} comercios · {usdFull(totales.montoActual)} trazados
-        </span>
-      </div>
+        {esVista ? (
+          <Card className="p-5">
+            <Note>
+              {ROL_LABEL[rol]} no aprueba una cola: ve el presupuesto completo y cuánto está
+              justificado. Las alertas de arriba marcan lo que no cierra.{" "}
+              <Link href="/presupuesto" className="font-medium text-ink underline underline-offset-2">
+                Ir al presupuesto →
+              </Link>
+            </Note>
+          </Card>
+        ) : inbox.length === 0 ? (
+          <Card className="p-5">
+            <Note>
+              No hay nada pendiente para {ROL_LABEL[rol]}. Aprobá o pedí foto desde otro rol y
+              volvé: vas a ver cómo se mueven los contadores y la actividad.
+            </Note>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {inbox.map((d) => (
+              <InboxCard key={d.id} d={d} />
+            ))}
+          </div>
+        )}
+      </section>
 
-      <div className="space-y-3">
-        {zonas.map((z, i) => (
-          <ZonaBlock key={z.zonaId} zona={z} abiertaInicial={i === 0} estados={estados} />
-        ))}
-      </div>
+      {/* Actividad */}
+      <section>
+        <h2 className="mb-1 text-sm font-semibold text-ink">Actividad reciente</h2>
+        <p className="mb-4 text-xs text-muted">
+          Cada acción queda registrada. Lo que hacés acá aparece arriba al instante.
+        </p>
+        <Card className="divide-y divide-line">
+          {registro.map((r, i) => {
+            const c = getComercio(r.decisionId.split(":")[0]);
+            return (
+              <FeedRow
+                key={`live-${i}`}
+                tono={r.a === "rechazada" || r.a === "devuelta" ? "warn" : "ok"}
+                texto={`${ESTADO_LABEL[r.de]} → ${ESTADO_LABEL[r.a]} · ${c?.nombre ?? ""}`}
+                detalle={`Por ${ROL_LABEL[r.por]}`}
+                cuando={r.cuando}
+                vivo
+              />
+            );
+          })}
+          {actividadBase().map((it) => (
+            <FeedRow
+              key={it.id}
+              tono={it.tono}
+              texto={it.texto}
+              detalle={it.detalle}
+              cuando={it.cuando}
+            />
+          ))}
+        </Card>
+      </section>
     </div>
   );
 }
 
-function ZonaBlock({
-  zona,
-  abiertaInicial,
-  estados,
-}: {
-  zona: ReturnType<typeof presupuestoPorZona>[number];
-  abiertaInicial: boolean;
-  estados: Record<string, EstadoDecision>;
-}) {
-  const [abierta, setAbierta] = useState(abiertaInicial);
-  const maxLinea = Math.max(...zona.lineas.map((l) => l.montoActual), 1);
-
+function AlertaCard({ a }: { a: Alerta }) {
+  const border =
+    a.tono === "bad"
+      ? "border-l-bad"
+      : a.tono === "warn"
+        ? "border-l-warn"
+        : a.tono === "ok"
+          ? "border-l-ok"
+          : "border-l-ink";
   return (
-    <Card>
-      <button
-        onClick={() => setAbierta((v) => !v)}
-        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <Chevron abierta={abierta} />
-          <span className="font-semibold text-ink">{zona.nombre}</span>
-          {zona.piloto ? <Badge tono="ink">Piloto</Badge> : null}
-        </div>
-        <div className="flex items-center gap-6">
-          <div className="hidden text-right sm:block">
-            <div className="text-xs text-muted">Justificado</div>
-            <div className="text-sm font-medium text-ink tnum">
-              {pct(zona.montoActual > 0 ? zona.justificado / zona.montoActual : 0)}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-muted">Inversión</div>
-            <div className="text-sm font-semibold text-ink tnum">
-              {usdFull(zona.montoActual)}
-            </div>
-          </div>
-        </div>
-      </button>
-
-      {abierta ? (
-        <div className="border-t border-line px-5 py-5">
-          {/* Líneas */}
-          <div className="mb-6 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
-            {zona.lineas.map((l) => (
-              <div key={l.linea} className="flex items-center gap-3">
-                <span className="w-40 shrink-0 text-sm text-ink-soft">
-                  {LINEA_LABEL[l.linea]}
-                </span>
-                <Bar value={l.montoActual} max={maxLinea} />
-                <span className="w-16 shrink-0 text-right text-sm font-medium text-ink tnum">
-                  {usdFull(l.montoActual)}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Comercios */}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-160 border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-medium text-muted">
-                  <th className="pb-2 pr-3 font-medium">Comercio</th>
-                  <th className="pb-2 pr-3 font-medium">Canal</th>
-                  <th className="pb-2 pr-3 font-medium">Compra vs parecidos</th>
-                  <th className="pb-2 pr-3 text-right font-medium">Inversión</th>
-                  <th className="pb-2 pr-3 font-medium">Estado</th>
-                  <th className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {zona.comercios.map((c) => (
-                  <ComercioRow key={c.id} c={c} estados={estados} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    <div className={cn("rounded-lg border border-line border-l-4 bg-paper p-4", border)}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <Badge tono={a.tono} dot>
+          {a.categoria}
+        </Badge>
+      </div>
+      <div className="text-sm font-semibold text-ink">{a.titulo}</div>
+      <p className="mt-1 text-sm leading-relaxed text-ink-soft">{a.detalle}</p>
+      {a.href && a.cta ? (
+        <Link
+          href={a.href}
+          className="mt-2.5 inline-flex items-center gap-1 text-xs font-medium text-ink underline underline-offset-2"
+        >
+          {a.cta}
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
       ) : null}
+    </div>
+  );
+}
+
+function InboxCard({ d }: { d: Decision }) {
+  const c = getComercio(d.comercioId);
+  return (
+    <Card className="p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/comercio/${d.comercioId}`} className="text-sm font-semibold text-ink hover:underline">
+            {c?.nombre ?? d.comercioId}
+          </Link>
+          <Badge tono="neutro">{LINEA_LABEL[d.linea]}</Badge>
+          <Badge tono="neutro">{ACCION_LABEL[d.accion]}</Badge>
+          {d.vencida ? <Badge tono="bad" dot>Vencida</Badge> : null}
+        </div>
+        <span className="text-sm font-medium text-ink tnum">
+          {usdFull(d.montoActual)} → {usdFull(d.montoPropuesto)}
+        </span>
+      </div>
+      <p className="mb-3 text-sm leading-relaxed text-ink-soft">{d.motivo}</p>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <span className="rounded bg-card px-2 py-0.5">{d.indicador}</span>
+        {d.reglaId ? (
+          <span className="rounded bg-card px-2 py-0.5 font-mono">
+            {d.reglaId} v{d.reglaVersion}
+          </span>
+        ) : null}
+      </div>
+      <div className="border-t border-line pt-3">
+        <DecisionActions d={d} />
+      </div>
     </Card>
   );
 }
 
-function ComercioRow({
-  c,
-  estados,
+function FeedRow({
+  tono,
+  texto,
+  detalle,
+  cuando,
+  vivo = false,
 }: {
-  c: Comercio;
-  estados: Record<string, EstadoDecision>;
+  tono: "ok" | "warn" | "neutro" | "ink";
+  texto: string;
+  detalle: string;
+  cuando: string;
+  vivo?: boolean;
 }) {
-  const inv = c.inversiones.reduce((a, i) => a + i.montoActual, 0);
-  const decs = decisionesDeComercio(c.id);
-  const algunaEspera = decs.some(
-    (d) => estadoEfectivo(estados, d.id, d.estadoInicial) === "esperando"
-  );
-  const sinJustificar = c.inversiones.some((i) => !i.justificado);
-
-  const ratio = c.compraVsParecidos;
-  const ratioTono = ratio < 0.6 ? "bad" : ratio < 0.85 ? "warn" : ratio > 1.3 ? "ok" : "ink";
-
-  const estado = algunaEspera
-    ? { t: "warn" as const, l: "Esperando" }
-    : sinJustificar
-      ? { t: "bad" as const, l: "A validar" }
-      : { t: "ok" as const, l: "Trazado" };
-
+  const dot =
+    tono === "ok" ? "bg-ok" : tono === "warn" ? "bg-warn" : tono === "ink" ? "bg-ink" : "bg-faint";
   return (
-    <tr className="group border-b border-line/70 last:border-0">
-      <td className="py-2.5 pr-3">
-        <Link href={`/comercio/${c.id}`} className="font-medium text-ink hover:underline">
-          {c.nombre}
-        </Link>
-        <div className="font-mono text-[11px] text-faint">{c.codigo}</div>
-      </td>
-      <td className="py-2.5 pr-3 text-ink-soft">{CANAL_LABEL[c.canal]}</td>
-      <td className="py-2.5 pr-3">
-        <div className="flex items-center gap-2">
-          <div className="w-24">
-            <Bar value={Math.min(ratio, 2)} max={2} tono={ratioTono} />
-          </div>
-          <span className={cn("text-xs tnum", ratioTono === "bad" ? "text-bad-ink" : "text-muted")}>
-            {Math.round(ratio * 100)}%
-          </span>
-        </div>
-        <div className="text-[11px] text-faint">{compraTexto(ratio)}</div>
-      </td>
-      <td className="py-2.5 pr-3 text-right font-medium text-ink tnum">{usdFull(inv)}</td>
-      <td className="py-2.5 pr-3">
-        <Badge tono={estado.t} dot>
-          {estado.l}
-        </Badge>
-      </td>
-      <td className="py-2.5 text-right">
-        <Link
-          href={`/comercio/${c.id}`}
-          className="text-faint transition-colors group-hover:text-ink"
-          aria-label={`Ver ${c.nombre}`}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden className="inline">
-            <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </Link>
-      </td>
-    </tr>
-  );
-}
-
-function Chevron({ abierta }: { abierta: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden
-      className={cn("text-faint transition-transform", abierta && "rotate-90")}
-    >
-      <path d="m6 4 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <div className="flex items-start gap-3 px-4 py-3">
+      <span className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", dot)} />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm text-ink">{texto}</div>
+        <div className="text-xs text-muted">{detalle}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5 text-xs text-faint">
+        {vivo ? <span className="rounded-full bg-ok-bg px-1.5 py-0.5 text-[10px] font-medium text-ok-ink">nuevo</span> : null}
+        {cuando}
+      </div>
+    </div>
   );
 }

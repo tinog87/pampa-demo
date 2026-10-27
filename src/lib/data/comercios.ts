@@ -1,9 +1,22 @@
 import type { Canal, Comercio, Foto, Inversion, Tamano, Zona } from "../types";
 
+// Las 14 zonas del caso, con una posición esquemática para el mapa
+// (mapX: oeste→este, mapY: norte→sur). No es geografía exacta.
 export const ZONAS: Zona[] = [
-  { id: "norte", nombre: "Zona Norte GBA", piloto: true, competenciaActiva: true },
-  { id: "litoral", nombre: "Zona Litoral", piloto: true, competenciaActiva: false },
-  { id: "cuyo", nombre: "Zona Cuyo", piloto: false, competenciaActiva: false },
+  { id: "norte", nombre: "Norte GBA", short: "NOR", piloto: true, competenciaActiva: true, mapX: 70, mapY: 40 },
+  { id: "oeste", nombre: "Oeste GBA", short: "OES", piloto: false, competenciaActiva: true, mapX: 60, mapY: 54 },
+  { id: "sur", nombre: "Sur GBA", short: "SUR", piloto: false, competenciaActiva: true, mapX: 72, mapY: 61 },
+  { id: "caba", nombre: "CABA Centro", short: "CABA", piloto: false, competenciaActiva: true, mapX: 73, mapY: 49 },
+  { id: "la-plata", nombre: "La Plata", short: "LP", piloto: false, competenciaActiva: false, mapX: 80, mapY: 66 },
+  { id: "litoral", nombre: "Litoral", short: "LIT", piloto: true, competenciaActiva: false, mapX: 55, mapY: 27 },
+  { id: "cordoba-cap", nombre: "Córdoba Capital", short: "CBA", piloto: false, competenciaActiva: false, mapX: 40, mapY: 42 },
+  { id: "cordoba-int", nombre: "Córdoba Interior", short: "CBI", piloto: false, competenciaActiva: false, mapX: 28, mapY: 40 },
+  { id: "cuyo", nombre: "Cuyo", short: "CUY", piloto: false, competenciaActiva: false, mapX: 13, mapY: 47 },
+  { id: "rosario", nombre: "Rosario", short: "ROS", piloto: false, competenciaActiva: true, mapX: 51, mapY: 50 },
+  { id: "mardel", nombre: "Mar del Plata", short: "MDP", piloto: false, competenciaActiva: false, mapX: 76, mapY: 78 },
+  { id: "noa", nombre: "Noroeste (NOA)", short: "NOA", piloto: false, competenciaActiva: false, mapX: 22, mapY: 13 },
+  { id: "nea", nombre: "Nordeste (NEA)", short: "NEA", piloto: false, competenciaActiva: false, mapX: 61, mapY: 12 },
+  { id: "patagonia", nombre: "Patagonia Norte", short: "PAT", piloto: false, competenciaActiva: false, mapX: 40, mapY: 87 },
 ];
 
 const PRECIO_EQUIPO = 500; // USD / año por heladera (supuesto, a validar con Finanzas)
@@ -237,11 +250,22 @@ function generados(): Comercio[] {
   const out: Comercio[] = [];
   const usados = new Set<string>();
 
-  // Reparto por zona: norte completa a 12, litoral 11, cuyo 9.
+  // Reparto por zona (norte suma además los 4 comercios cableados a mano).
   const plan: Array<[string, number]> = [
-    ["norte", 8],
-    ["litoral", 11],
-    ["cuyo", 9],
+    ["norte", 6],
+    ["oeste", 7],
+    ["sur", 6],
+    ["caba", 8],
+    ["la-plata", 5],
+    ["litoral", 7],
+    ["cordoba-cap", 7],
+    ["cordoba-int", 5],
+    ["cuyo", 5],
+    ["rosario", 7],
+    ["mardel", 5],
+    ["noa", 5],
+    ["nea", 5],
+    ["patagonia", 4],
   ];
 
   let n = 1;

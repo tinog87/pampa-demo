@@ -42,8 +42,11 @@ export type Rol =
 export type Zona = {
   id: string;
   nombre: string;
+  short: string; // abreviatura para el mapa
   piloto: boolean;
   competenciaActiva: boolean;
+  mapX: number; // 0–100, oeste → este
+  mapY: number; // 0–100, norte → sur
 };
 
 export type Inversion = {
