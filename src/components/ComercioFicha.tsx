@@ -117,6 +117,21 @@ export function ComercioFicha() {
                 ))}
               </div>
             </div>
+          ) : c.acuerdo ? (
+            <div className="overflow-hidden rounded-md border border-line">
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 bg-card px-2.5 py-1 text-[11px] font-medium text-muted">
+                <span>Pactado</span>
+                <span>En la foto</span>
+                <span>¿Cumple?</span>
+              </div>
+              {c.acuerdo.map((a) => (
+                <div key={a.pactado} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 border-t border-line px-2.5 py-1 text-xs">
+                  <span className="text-ink-soft">{a.pactado}</span>
+                  <span className="text-ink-soft">{a.foto}</span>
+                  <span className={a.cumple ? "text-ok-ink" : "text-bad-ink"}>{a.cumple ? "Sí" : "No"}</span>
+                </div>
+              ))}
+            </div>
           ) : (
             <span className="text-muted">Sin foto todavía: se pide en la próxima visita.</span>
           )}
